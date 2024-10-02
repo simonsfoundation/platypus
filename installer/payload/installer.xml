@@ -1,0 +1,277 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<installer>
+	<product>
+		<id>Platypus-1</id>
+		<name>Platypus</name>
+		<version>1.0</version>
+		<company>Duke University</company>
+		<url>http://www.project-platypus.net</url>
+	</product>
+
+	<resources root="resources">
+	</resources>
+
+	<!-- on 64-bit Windows, $ProgramFiles) points to the 64-bit Program Files -->
+	<variable id="TargetFolder">$(ProgramFiles)/$(ProductName)</variable>
+
+	<!-- note the short version used for the Start Folder -->
+	<variable platform="windows" id="StartFolder">$(StartMenu)/Programs/$(ProductName)</variable>
+
+	<variable platform="windows" id="AppExtension">exe</variable>
+	<variable platform="osx" id="AppExtension">app</variable>
+	<variable platform="windows" id="PluginExtension">8bf</variable>
+	<variable platform="osx" id="PluginExtension">plugin</variable>
+	
+	<root>files</root>
+
+	<find platform="osx">
+		<app>com.adobe.Photoshop</app>
+	</find>
+
+	<!-- x64 redistributable -->
+	<package platform="windows" id="vs2012_x64_redist" name="Visual Studio 2012 x64 Redistributable" visible="false" redist="true">
+		<run>
+			<install status="Installing $(PackageName)...">
+				<command>$(Resources)/vcredist_x64.exe</command>
+				<args>/passive /norestart</args>
+			</install>
+		</run>
+	</package>
+
+	<!-- Platypus -->
+	<package id="platypus" name="$(ProductName)" version="1.0.20">
+		<dependency platform="windows">vs2012_x64_redist</dependency>
+		<target create="true">$(TargetFolder)</target>
+
+		<content>
+			<file>Platypus.$(AppExtension)</file>
+			<folder>images</folder>
+			<file>User Guide.pdf</file>
+		</content>
+
+		<content platform="windows">
+			<folder>plugins</folder>
+			<file>Qt5Core.dll</file>
+			<file>Qt5Gui.dll</file>
+			<file>Qt5Concurrent.dll</file>
+			<file>Qt5Widgets.dll</file>
+			<file>Qt5Xml.dll</file>
+			<file>icudt53.dll</file>
+			<file>icuin53.dll</file>
+			<file>icuuc53.dll</file>
+			<file>libCradle.dll</file>
+			<file>opencv_core249.dll</file>
+			<file>opencv_highgui249.dll</file>
+			<file>opencv_imgproc249.dll</file>
+		</content>
+
+		<content platform="osx">
+			<folder>Uninstall Platypus.app</folder>
+		</content>
+
+		<events platform="windows">
+			<createFolder cleanup="true">$(StartFolder)</createFolder>
+		</events>
+		<link platform="windows">
+			<source>$(TargetFolder)/User Guide.pdf</source>
+			<dest>$(StartFolder)/Platypus User Guide</dest>
+		</link>
+		<link platform="windows">
+			<source>$(TargetFolder)/Platypus.exe</source>
+			<dest>$(StartFolder)/$(ProductName)</dest>
+		</link>
+
+	</package>
+
+	<!-- Host: Photoshop -->
+	<package id="photoshop" name="$(ProductName) for Adobe Photoshop" version="1.0.16">
+		<dependency>platypus</dependency>
+		<target>$(TargetFolder)</target>
+
+		<variable id="Source">$(TargetFolder)</variable>
+		<variable id="PluginFolderName">$(ProductName) v$(ProductVersion)</variable>
+		<variable id="DestFolder">$(PluginPath)/$(PluginFolderName)</variable>
+
+		<!-- Photoshop CS5 -->
+		<package id="photoshopCS5" name="$(ProductName) for Adobe Photoshop CS5">
+			<variable platform="windows" path="true" id="PluginPath">$(REG_SOFTWARE_64)/Adobe/Photoshop/12.0/PluginPath</variable>
+			<variable platform="osx" id="AppPath" find="com.adobe.Photoshop,12.0*"/>
+			<variable platform="osx" id="PluginPath">$(AppPath)/../Plug-ins</variable>
+			<supported platform="windows">$(PluginPath)</supported>
+			<supported platform="osx">$(AppPath)</supported>
+			<target create="true">$(DestFolder)</target>
+			<content>
+				<file>User Guide.pdf</file>				
+				<file>Platypus.$(AppExtension)</file>
+				<file>Platypus.$(PluginExtension)</file>
+			</content>
+			<content platform="windows">
+				<folder>plugins</folder>
+				<file>Qt5Core.dll</file>
+				<file>Qt5Gui.dll</file>
+				<file>Qt5Concurrent.dll</file>
+				<file>Qt5Widgets.dll</file>
+				<file>Qt5Xml.dll</file>
+				<file>icudt53.dll</file>
+				<file>icuin53.dll</file>
+				<file>icuuc53.dll</file>
+				<file>opencv_core249.dll</file>
+				<file>opencv_highgui249.dll</file>
+				<file>opencv_imgproc249.dll</file>
+			</content>
+		</package>
+
+		<!-- Photoshop CS5.1  -->
+		<package platform="osx" id="photoshopCS5.1" name="$(ProductName) for Adobe Photoshop CS5.1">
+			<variable platform="osx" id="AppPath" find="com.adobe.Photoshop,12.1*"/>
+			<variable platform="osx" id="PluginPath">$(AppPath)/../Plug-ins</variable>
+			<supported platform="osx">$(AppPath)</supported>
+			<variable platform="windows" path="true" id="PluginPath">$(REG_SOFTWARE_64)/Adobe/Photoshop/55.0/PluginPath</variable>
+			<supported platform="windows">$(PluginPath)</supported>
+			<target create="true">$(DestFolder)</target>
+			<content>
+				<file>User Guide.pdf</file>
+				<file>Platypus.$(AppExtension)</file>
+				<file>Platypus.$(PluginExtension)</file>
+			</content>
+			<content platform="windows">
+				<folder>plugins</folder>
+				<file>Qt5Core.dll</file>
+				<file>Qt5Gui.dll</file>
+				<file>Qt5Concurrent.dll</file>
+				<file>Qt5Widgets.dll</file>
+				<file>Qt5Xml.dll</file>
+				<file>icudt53.dll</file>
+				<file>icuin53.dll</file>
+				<file>icuuc53.dll</file>
+				<file>libCradle.dll</file>
+				<file>opencv_core249.dll</file>
+				<file>opencv_highgui249.dll</file>
+				<file>opencv_imgproc249.dll</file>
+			</content>
+
+		</package>
+
+		<!-- Photoshop CS6 -->
+		<package id="photoshopCS6" name="$(ProductName) for Adobe Photoshop CS6">
+			<variable platform="osx" id="AppPath" find="com.adobe.Photoshop,13.*"/>
+			<variable platform="osx" id="PluginPath">$(AppPath)/../Plug-ins</variable>
+			<supported platform="osx">$(AppPath)</supported>
+			<variable platform="windows" path="true" id="PluginPath">$(REG_SOFTWARE_64)/Adobe/Photoshop/60.0/PluginPath</variable>
+			<supported platform="windows">$(PluginPath)</supported>
+			<target create="true">$(DestFolder)</target>
+			<content>
+				<file>User Guide.pdf</file>
+				<file>Platypus.$(AppExtension)</file>
+				<file>Platypus.$(PluginExtension)</file>
+			</content>
+			<content platform="windows">
+				<folder>plugins</folder>
+				<file>Qt5Core.dll</file>
+				<file>Qt5Gui.dll</file>
+				<file>Qt5Concurrent.dll</file>
+				<file>Qt5Widgets.dll</file>
+				<file>Qt5Xml.dll</file>
+				<file>icudt53.dll</file>
+				<file>icuin53.dll</file>
+				<file>icuuc53.dll</file>
+				<file>libCradle.dll</file>
+				<file>opencv_core249.dll</file>
+				<file>opencv_highgui249.dll</file>
+				<file>opencv_imgproc249.dll</file>
+			</content>
+		</package>
+
+		<!-- Photoshop CC -->
+		<package id="photoshopCC" name="$(ProductName) for Adobe Photoshop CC">
+			<variable platform="osx" id="AppPath" find="com.adobe.Photoshop,14.*"/>
+			<variable platform="osx" id="PluginPath">$(AppPath)/../Plug-ins</variable>
+			<supported platform="osx">$(AppPath)</supported>
+			<variable platform="windows" path="true" id="PluginPath">$(REG_SOFTWARE_64)/Adobe/Photoshop/70.0/PluginPath</variable>
+			<supported platform="windows">$(PluginPath)</supported>
+			<target create="true">$(DestFolder)</target>
+			<content>
+				<file>User Guide.pdf</file>
+				<file>Platypus.$(AppExtension)</file>
+				<file>Platypus.$(PluginExtension)</file>
+			</content>
+			<content platform="windows">
+				<folder>plugins</folder>
+				<file>Qt5Core.dll</file>
+				<file>Qt5Gui.dll</file>
+				<file>Qt5Concurrent.dll</file>
+				<file>Qt5Widgets.dll</file>
+				<file>Qt5Xml.dll</file>
+				<file>icudt53.dll</file>
+				<file>icuin53.dll</file>
+				<file>icuuc53.dll</file>
+				<file>libCradle.dll</file>
+				<file>opencv_core249.dll</file>
+				<file>opencv_highgui249.dll</file>
+				<file>opencv_imgproc249.dll</file>
+			</content>
+		</package>
+
+		<!-- Photoshop CC 2014 -->
+		<package id="photoshopCC2014" name="$(ProductName) for Adobe Photoshop CC 2014" version="1.0.1">
+			<variable platform="osx" id="AppPath" find="com.adobe.Photoshop,15.*"/>
+			<variable platform="osx" id="PluginPath">$(AppPath)/../Plug-ins</variable>
+			<supported platform="osx">$(AppPath)</supported>
+			<variable platform="windows" path="true" id="PluginPath">$(REG_SOFTWARE_64)/Adobe/Photoshop/80.0/PluginPath</variable>
+			<supported platform="windows">$(PluginPath)</supported>
+			<target create="true">$(DestFolder)</target>
+			<content>
+				<file>User Guide.pdf</file>
+				<file>Platypus.$(AppExtension)</file>
+				<file>Platypus.$(PluginExtension)</file>
+			</content>
+			<content platform="windows">
+				<folder>plugins</folder>
+				<file>Qt5Core.dll</file>
+				<file>Qt5Gui.dll</file>
+				<file>Qt5Concurrent.dll</file>
+				<file>Qt5Widgets.dll</file>
+				<file>Qt5Xml.dll</file>
+				<file>icudt53.dll</file>
+				<file>icuin53.dll</file>
+				<file>icuuc53.dll</file>
+				<file>libCradle.dll</file>
+				<file>opencv_core249.dll</file>
+				<file>opencv_highgui249.dll</file>
+				<file>opencv_imgproc249.dll</file>
+			</content>
+		</package>
+
+		<!-- Photoshop CC 2015 -->
+		<package id="photoshopCC2015" name="$(ProductName) for Adobe Photoshop CC 2015">
+			<variable platform="osx" id="AppPath" find="com.adobe.Photoshop,16.*"/>
+			<variable platform="osx" id="PluginPath">$(AppPath)/../Plug-ins</variable>
+			<supported platform="osx">$(AppPath)</supported>
+			<variable platform="windows" path="true" id="PluginPath">$(REG_SOFTWARE_64)/Adobe/Photoshop/90.0/PluginPath</variable>
+			<supported platform="windows">$(PluginPath)</supported>
+			<target create="true">$(DestFolder)</target>
+			<content>
+				<file>User Guide.pdf</file>
+				<file>Platypus.$(AppExtension)</file>
+				<file>Platypus.$(PluginExtension)</file>
+			</content>
+			<content platform="windows">
+				<folder>plugins</folder>
+				<file>Qt5Core.dll</file>
+				<file>Qt5Gui.dll</file>
+				<file>Qt5Concurrent.dll</file>
+				<file>Qt5Widgets.dll</file>
+				<file>Qt5Xml.dll</file>
+				<file>icudt53.dll</file>
+				<file>icuin53.dll</file>
+				<file>icuuc53.dll</file>
+				<file>libCradle.dll</file>
+				<file>opencv_core249.dll</file>
+				<file>opencv_highgui249.dll</file>
+				<file>opencv_imgproc249.dll</file>
+			</content>
+		</package>
+
+	</package>
+
+</installer>
