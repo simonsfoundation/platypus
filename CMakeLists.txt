@@ -8,13 +8,13 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_VERBOSE_MAKEFILE YES)
-
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 # Specify C++ standard
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find the required Qt packages
 find_package(Qt5 5 REQUIRED COMPONENTS Core Gui Widgets Xml)
-
+find_package(xcb)
 # Configuration Options
 option(OpenCV_DIR "Path to OpenCV if not found automatically" "")
 
@@ -51,13 +51,15 @@ add_executable(PlatypusGui ${SOURCES} src/platypus.qrc)
 
 # Link against Qt and OpenCV libraries
 target_link_libraries(PlatypusGui PRIVATE
-  Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Xml ${OpenCV_LIBS} platypus)
+  Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Xml ${OpenCV_LIBS} platypus xcb)
 
 # Add include directories if needed
 target_include_directories(PlatypusGui PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_BINARY_DIR} # For generated files
 )
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/installer/payload/files/user_guide.pdf ${CMAKE_CURRENT_BINARY_DIR}/user_guide.pdf COPYONLY)
 
 # Handle other dependencies like libjpeg, libtiff, and zlib if necessary
 # find_package(JPEG REQUIRED)

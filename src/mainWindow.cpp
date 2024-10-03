@@ -11,6 +11,7 @@
 #include <removeSource.h>
 #include <detectCradleDialog.h>
 #include <slider.h>
+#include <util.hpp>
 #include <platypus/CradleFunctions.h>
 #include <platypus/TextureRemoval.h>
 #include <QtWidgets/QMenu>
@@ -424,10 +425,12 @@ void MainWindow::open(const QString &path, bool pluginMode)
 //
 void MainWindow::onOpenImage()
 {
+    pp("onOpenImage", __LINE__);
 	QSettings settings;
 	QString dir = settings.value("/imageDir").toString();
-	QString filter = QString("*.tif;*.tiff;*.png").arg(kProjectExtension);
-	QFileDialog dialog(this, tr("Open Image"), dir, filter);
+	QString filter = tr("Project Files (*.%1);;Image Files (*.tif *.tiff *.png);;All Files (*)").arg(kProjectExtension);
+    QFileDialog dialog(this, tr("Open Image"), dir, filter);
+    dialog.setFileMode(QFileDialog::ExistingFile);
 	if (dialog.exec())
 	{
 		QStringList files = dialog.selectedFiles();
@@ -442,6 +445,7 @@ void MainWindow::onOpenImage()
 
 void MainWindow::onOpen()
 {
+    pp("onOpen", __LINE__);
 	QSettings settings;
 	QString dir = settings.value("/imageDir").toString();
 	QString filter = QString("*.%1").arg(kProjectExtension);
@@ -692,7 +696,7 @@ void MainWindow::onDetectCradle()
     std::memset(maskWrapper->imageData, 0, maskWrapper->imageSize);
     buildMask(maskWrapper, maskImage, CradleFunctions::DEFECT);
     auto arr_to_mat = [](auto&& imageref) {
-        return cv::cvarrToMat(imageref.get()).clone();
+        return cv::cvarrToMat(imageref.get());
     };
     cv::Mat mask(arr_to_mat(maskWrapper));
     cv::Mat source(arr_to_mat(ImageManager::get().floatImage()));
@@ -809,7 +813,7 @@ void MainWindow::save(const QString &path)
         if (s_debug_mode)
         {
             auto arr_to_mat = [](auto&& imageref) {
-              return cv::cvarrToMat(imageref.get()).clone();
+              return cv::cvarrToMat(imageref.get());
             };
 
         	cvImageRef maskImage = buildMask(m_project);
@@ -1089,7 +1093,7 @@ void MainWindow::onRemoveCradle()
 	std::memset(result->imageData, 0, result->imageSize);
 	std::memset(removeMask->imageData, 0, removeMask->imageSize);
             auto arr_to_mat = [](auto&& imageref) {
-              return cv::cvarrToMat(imageref.get()).clone();
+              return cv::cvarrToMat(imageref.get());
             };
 	cv::Mat sourceMat(arr_to_mat(source));
 	cv::Mat resultMat(arr_to_mat(result));
@@ -1405,7 +1409,7 @@ void MainWindow::onRemoveTexture()
     resultWrap.convertTo(resultMat, CV_32F);
     source->setIsFinal(true);
             auto arr_to_mat = [](auto&& imageref) {
-              return cv::cvarrToMat(imageref.get()).clone();
+              return cv::cvarrToMat(imageref.get());
             };
     cvImageRef mask = buildMask(m_project);
     cv::Mat maskMat(arr_to_mat(mask));
@@ -1441,7 +1445,7 @@ void MainWindow::onHelp()
         appPath = QFileInfo(appPath).absolutePath();
 		appPath = QFileInfo(appPath).absolutePath();
     #endif
-    QString helpPath = QDir(appPath).absoluteFilePath("User Guide.pdf");
+    QString helpPath = QDir(appPath).absoluteFilePath("user_guide.pdf");
     QDesktopServices::openUrl(QUrl::fromLocalFile(helpPath));
 }
 
