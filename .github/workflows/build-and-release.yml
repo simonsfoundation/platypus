@@ -52,7 +52,7 @@ jobs:
     - name: Install dependencies on Windows
       if: matrix.os == 'windows-latest'
       run: |
-        choco install qt5 ninja -y
+        choco install qt5-default ninja -y
 
     # Install vcpkg
     - name: Install vcpkg
