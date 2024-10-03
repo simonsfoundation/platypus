@@ -14,7 +14,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find the required Qt packages
 find_package(Qt5 5 REQUIRED COMPONENTS Core Gui Widgets Xml)
-find_package(xcb)
+if (NOT WIN32)
+  find_package(xcb)
+endif()
 # Configuration Options
 option(BUILD_PHOTOSHOP_PLUGIN "Build the Photoshop plugin" OFF)
 # Find OpenCV

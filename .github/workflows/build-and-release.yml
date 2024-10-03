@@ -53,6 +53,14 @@ jobs:
       run: |
         choco install opencv qt5-default -y
 
+    # Set OpenCV environment variables and add to PATH
+    - name: Set OpenCV environment variables
+      if: matrix.os == 'windows-latest'
+      shell: cmd
+      run: |
+        setx OPENCV_DIR "C:\tools\opencv"
+        setx PATH "%PATH%;%OPENCV_DIR%\bin"
+
     # 3. Configure CMake
     - name: Configure CMake
       run: cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
