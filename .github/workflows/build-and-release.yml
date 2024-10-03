@@ -28,6 +28,8 @@ jobs:
 
     - name: Install Qt
       uses: jurplel/install-qt-action@v4
+      with:
+        cache: true
 
     ## Windows Build ##
     - name: run-vcpkg
@@ -66,14 +68,13 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install -y libopencv-dev qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools libxcb1-dev
+        sudo apt-get install -y libopencv-dev libxcb1-dev
 
     # macOS setup
     - name: Install dependencies on macOS
       if: matrix.os == 'macos-latest'
       run: |
-        brew install qt@5 opencv libxcb
-        export PATH="/opt/homebrew/opt/qt@5/bin:$PATH"
+        brew install opencv
 
     # 3. Configure CMake
     - name: Configure CMake
