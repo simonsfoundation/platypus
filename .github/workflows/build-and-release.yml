@@ -52,15 +52,37 @@ jobs:
     - name: Install dependencies on Windows
       if: matrix.os == 'windows-latest'
       run: |
-        choco install opencv qt5-default -y
+        choco install qt5 ninja -y
 
-    # 3. Configure CMake
-    - name: Configure CMake
-      if : matrix.os == 'windows-latest'
+    # Install vcpkg
+    - name: Install vcpkg
+      if: matrix.os == 'windows-latest'
       run: |
-        setx OPENCV_DIR "C:\tools\opencv"
-        setx PATH "%PATH%;%OPENCV_DIR%\bin"
-        cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DOpenCV_DIR="C:\tools\opencv"
+        git clone https://github.com/microsoft/vcpkg.git
+        .\vcpkg\bootstrap-vcpkg.bat
+
+    # Install OpenCV via vcpkg
+    - name: Install OpenCV via vcpkg
+      if: matrix.os == 'windows-latest'
+      run: |
+        .\vcpkg\vcpkg.exe install opencv[contrib]:x64-windows
+
+    # Set up MSVC environment
+    - name: Set up MSVC environment
+      if: matrix.os == 'windows-latest'
+      shell: cmd
+      run: |
+        for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set InstallDir=%%i
+        call "%InstallDir%\VC\Auxiliary\Build\vcvarsall.bat" x64
+
+    # Configure CMake (Windows)
+    - name: Configure CMake (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: cmd
+      run: |
+        cmake -B build -S . -G Ninja ^
+          -DCMAKE_TOOLCHAIN_FILE=%cd%\vcpkg\scripts\buildsystems\vcpkg.cmake ^
+          -DCMAKE_BUILD_TYPE=Release
 
     # 3. Configure CMake
     - name: Configure CMake
