@@ -59,7 +59,7 @@ jobs:
     - name: Build PlatypusGui
       run: cmake --build build --config Release -target PlatypusGui
 
-    # 5. Archive the build output
+    # 5. Archive the build output3
     - name: Archive build output
       if: matrix.os == 'ubuntu-latest'
       run: zip -r PlatypusGui-linux.zip build/PlatypusGui
