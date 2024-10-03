@@ -59,7 +59,7 @@ jobs:
 
     # 4. Build the project
     - name: Build PlatypusGui
-      run: cmake --build build --config Release -target PlatypusGui
+      run: cmake --build build --config Release --target PlatypusGui
 
     # 5. Archive the build output3
     - name: Archive build output
