@@ -22,6 +22,7 @@ jobs:
       uses: seanmiddleditch/gha-setup-ninja@master
 
     - name: run-vcpkg
+      if: matrix.os == 'windows-latest'
       uses: lukka/run-vcpkg@v11.5
 
     # 2. Set up the environment
