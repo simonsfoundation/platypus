@@ -27,6 +27,7 @@ jobs:
         cmake-version: '3.16'
 
     - name: Install Qt
+      if : matrix.os != 'macos-latest'
       uses: jurplel/install-qt-action@v4
       with:
         cache: true
@@ -81,7 +82,7 @@ jobs:
     - name: Install dependencies on macOS
       if: matrix.os == 'macos-latest'
       run: |
-        brew install opencv
+        brew install opencv qt@5
 
     # Configure CMake for macOS
     - name: Configure CMake (macOS)
