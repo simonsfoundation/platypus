@@ -18,6 +18,9 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
+    - name: Get Ninja
+      uses: seanmiddleditch/gha-setup-ninja@master
+
     # 2. Set up the environment
     - name: Set up CMake
       uses: jwlawson/actions-setup-cmake@v1
@@ -52,7 +55,6 @@ jobs:
 
     # 3. Configure CMake
     - name: Configure CMake
-      uses: seanmiddleditch/gha-setup-ninja@master
       run: cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
 
     # 4. Build the project
