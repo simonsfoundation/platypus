@@ -35,7 +35,7 @@ jobs:
     - name: Install dependencies on macOS
       if: matrix.os == 'macos-latest'
       run: |
-        brew install qt@5 opencv xcb
+        brew install qt@5 opencv libxcb
 
     # Windows setup
     - name: Install Chocolatey on Windows
