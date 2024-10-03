@@ -21,38 +21,17 @@ jobs:
     - name: Get Ninja
       uses: seanmiddleditch/gha-setup-ninja@master
 
+    - name: run-vcpkg
+      uses: lukka/run-vcpkg@v11.5
+
     # 2. Set up the environment
     - name: Set up CMake
       uses: jwlawson/actions-setup-cmake@v1
       with:
         cmake-version: '3.16'
 
-    # Linux setup
-    - name: Install dependencies on Linux
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libopencv-dev qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools libxcb1-dev
-
-    # macOS setup
-    - name: Install dependencies on macOS
-      if: matrix.os == 'macos-latest'
-      run: |
-        brew install qt@5 opencv libxcb
-        export PATH="/opt/homebrew/opt/qt@5/bin:$PATH"
-
-    # Windows setup
-    - name: Install Chocolatey on Windows
-      if: matrix.os == 'windows-latest'
-      run: |
-        Set-ExecutionPolicy Bypass -Scope Process -Force; `
-        Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-
-    # Install dependencies on Windows
-    - name: Install dependencies on Windows
-      if: matrix.os == 'windows-latest'
-      run: |
-        choco install qt5-default ninja -y
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
 
     # Install vcpkg
     - name: Install vcpkg
@@ -83,6 +62,21 @@ jobs:
         cmake -B build -S . -G Ninja ^
           -DCMAKE_TOOLCHAIN_FILE=%cd%\vcpkg\scripts\buildsystems\vcpkg.cmake ^
           -DCMAKE_BUILD_TYPE=Release
+
+
+    # Linux setup
+    - name: Install dependencies on Linux
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libopencv-dev qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools libxcb1-dev
+
+    # macOS setup
+    - name: Install dependencies on macOS
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew install qt@5 opencv libxcb
+        export PATH="/opt/homebrew/opt/qt@5/bin:$PATH"
 
     # 3. Configure CMake
     - name: Configure CMake
