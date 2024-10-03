@@ -24,6 +24,8 @@ jobs:
     - name: run-vcpkg
       if: matrix.os == 'windows-latest'
       uses: lukka/run-vcpkg@v11.5
+      with:
+        vcpkgJsonGlob: 'vcpkg.json'
 
     # 2. Set up the environment
     - name: Set up CMake
@@ -33,13 +35,6 @@ jobs:
 
     - name: Install Qt
       uses: jurplel/install-qt-action@v4
-
-    # Install vcpkg
-    - name: Install vcpkg
-      if: matrix.os == 'windows-latest'
-      run: |
-        git clone https://github.com/microsoft/vcpkg.git
-        .\vcpkg\bootstrap-vcpkg.bat
 
     # Install OpenCV via vcpkg
     - name: Install OpenCV via vcpkg
