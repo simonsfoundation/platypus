@@ -63,24 +63,33 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release
 
     ## End Windows Build ##
-    # Linux setup
+
+    ## Linux setup ##
     - name: Install dependencies on Linux
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
         sudo apt-get install -y libopencv-dev libxcb1-dev
 
-    # macOS setup
+    # 3. Configure CMake
+    - name: Configure CMake
+      if : matrix.os == 'ubuntu-latest'
+      run: cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
+    ## End Linux setup ##
+
+    ## macOS setup ##
     - name: Install dependencies on macOS
       if: matrix.os == 'macos-latest'
       run: |
         brew install opencv
 
-    # 3. Configure CMake
-    - name: Configure CMake
-      if : matrix.os != 'windows-latest'
-      run: cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
-
+    # Configure CMake for macOS
+    - name: Configure CMake (macOS)
+      if: matrix.os == 'macos-latest'
+      run: cmake -B build -S . -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_OSX_ARCHITECTURES=arm64
+    ## End macOS setup ##
     # 4. Build the project
     - name: Build PlatypusGui
       run: cmake --build build --config Release --target PlatypusGui
