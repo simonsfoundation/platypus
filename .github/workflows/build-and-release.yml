@@ -29,18 +29,19 @@ jobs:
     - name: Install Qt
       uses: jurplel/install-qt-action@v4
 
+    ## Windows Build ##
     - name: run-vcpkg
       if: matrix.os == 'windows-latest'
       uses: lukka/run-vcpkg@v11.5
       with:
         vcpkgJsonGlob: 'vcpkg.json'
         vcpkgGitCommitId: 'c82f74667287d3dc386bce81e44964370c91a289'
-    ## Windows Build ##
+
     # Install OpenCV via vcpkg
     - name: Install OpenCV via vcpkg
       if: matrix.os == 'windows-latest'
       run: |
-        .\vcpkg\vcpkg.exe install opencv[contrib]:x64-windows
+        .\vcpkg\vcpkg.exe install
 
     # Set up MSVC environment
     - name: Set up MSVC environment
