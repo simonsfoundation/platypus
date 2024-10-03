@@ -52,7 +52,7 @@ jobs:
 
     # 3. Configure CMake
     - name: Configure CMake
-    - uses: seanmiddleditch/gha-setup-ninja@master
+      uses: seanmiddleditch/gha-setup-ninja@master
       run: cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
 
     # 4. Build the project
