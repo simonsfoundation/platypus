@@ -78,12 +78,4 @@ jobs:
           PlatypusGui-linux.zip
           PlatypusGui-mac.zip
           PlatypusGui-windows.zip
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: |
-          PlatypusGui-linux.zip
-          PlatypusGui-mac.zip
-          PlatypusGui-windows.zip
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
