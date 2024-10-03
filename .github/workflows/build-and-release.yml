@@ -52,11 +52,12 @@ jobs:
 
     # 3. Configure CMake
     - name: Configure CMake
-      run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+    - uses: seanmiddleditch/gha-setup-ninja@master
+      run: cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
 
     # 4. Build the project
     - name: Build PlatypusGui
-      run: cmake --build build --config Release
+      run: cmake --build build --config Release -target PlatypusGui
 
     # 5. Archive the build output
     - name: Archive build output

@@ -48,6 +48,16 @@ file(GLOB_RECURSE SOURCES
 # Add the executable
 add_executable(PlatypusGui ${SOURCES} src/platypus.qrc)
 
+include(CheckIPOSupported)
+check_ipo_supported(RESULT supported OUTPUT error)
+
+if( supported )
+    message(STATUS "IPO / LTO enabled")
+    set_property(TARGET PlatypusGui PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+else()
+    message(STATUS "IPO / LTO not supported: <${error}>")
+endif()
+
 # Link against Qt and OpenCV libraries
 target_link_libraries(PlatypusGui PRIVATE
   Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Xml ${OpenCV_LIBS} platypus xcb)
