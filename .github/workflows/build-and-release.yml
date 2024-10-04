@@ -21,7 +21,6 @@ jobs:
     - name: Install dependencies via vcpkg
       if : matrix.os == 'windows-latest'
       run: |
-        export VCPKG_MANIFEST_MODE=OFF
         vcpkg.exe install opencv[contrib]:x64-windows
 
     - name: Get Ninja
