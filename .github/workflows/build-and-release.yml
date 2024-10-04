@@ -75,13 +75,6 @@ jobs:
     #    chmod +x ./scripts/deploy_opencv.sh
     #    ./scripts/deploy_opencv.sh
 
-    # 5. Archive the build output3
-    - name: Archive build output
-      if: matrix.os == 'ubuntu-latest'
-      run: zip -r PlatypusGui-linux.zip build/PlatypusGui
-    - name: Archive build output
-      if: matrix.os == 'macos-latest'
-      run: zip -r PlatypusGui-mac.zip build/PlatypusGui.app
 
     # 6. Upload artifacts for release
     - name: Upload Release Artifacts
@@ -89,6 +82,6 @@ jobs:
       with:
         name: ${{ matrix.os }}-platypus
         path: |
-          PlatypusGui-linux.zip
-          PlatypusGui-mac.zip
+          build/PlatypusGui.app
+          build/PlatypusGui
 
