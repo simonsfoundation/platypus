@@ -75,7 +75,6 @@ jobs:
     #    chmod +x ./scripts/deploy_opencv.sh
     #    ./scripts/deploy_opencv.sh
 
-
     # 6. Upload artifacts for release
     - name: Upload Release Artifacts
       uses: actions/upload-artifact@v3
