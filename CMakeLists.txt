@@ -32,7 +32,8 @@ include(FetchContent)
 FetchContent_Declare(
   platypus
   GIT_REPOSITORY https://github.com/SteveBronder/platypus
-  GIT_TAG main)
+  GIT_TAG main
+  CMAKE_ARGS -DOpenCV_DIR=${OpenCV_DIR})
 FetchContent_MakeAvailable(platypus)
 
 # Include directories for OpenCV and other dependencies if necessary

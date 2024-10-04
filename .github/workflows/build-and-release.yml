@@ -18,6 +18,16 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
+    - name: Install vcpkg
+      if : matrix.os == 'windows-latest'
+      run: |
+        git clone https://github.com/microsoft/vcpkg.git
+        .\vcpkg\bootstrap-vcpkg.bat
+
+    - name: Install dependencies via vcpkg
+      run: |
+        .\vcpkg\vcpkg.exe install opencv[contrib]:x64-windows
+
     - name: Get Ninja
       uses: seanmiddleditch/gha-setup-ninja@master
 
@@ -33,19 +43,8 @@ jobs:
         cache: true
 
     ## Windows Build ##
-    - name: run-vcpkg
-      if: matrix.os == 'windows-latest'
-      uses: lukka/run-vcpkg@v11.5
-      with:
-        vcpkgJsonGlob: 'vcpkg.json'
-        vcpkgGitCommitId: 'c82f74667287d3dc386bce81e44964370c91a289'
 
     # Install OpenCV via vcpkg
-    - name: Install OpenCV via vcpkg
-      if: matrix.os == 'windows-latest'
-      run: |
-        .\vcpkg\vcpkg.exe install
-
     # Set up MSVC environment
     - name: Set up MSVC environment
       if: matrix.os == 'windows-latest'
@@ -61,7 +60,8 @@ jobs:
       run: |
         cmake -B build -S . -G Ninja ^
           -DCMAKE_TOOLCHAIN_FILE=%cd%\vcpkg\scripts\buildsystems\vcpkg.cmake ^
-          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_BUILD_TYPE=Release ^
+          -DVCPKG_FEATURE_FLAGS=""
 
     ## End Windows Build ##
 
