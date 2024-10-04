@@ -72,7 +72,7 @@ jobs:
     - name: Deploy OpenCV Libraries
       if: matrix.os == 'macos-latest'
       run: |
-        chmod +x deploy_opencv.sh
+        chmod +x ./scripts/deploy_opencv.sh
         ./scripts/deploy_opencv.sh
 
     # 5. Archive the build output3
