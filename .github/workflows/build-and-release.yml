@@ -21,6 +21,7 @@ jobs:
     - name: Install dependencies via vcpkg
       if : matrix.os == 'windows-latest'
       run: |
+        export VCPKG_MANIFEST_MODE=OFF
         vcpkg.exe install opencv[contrib]:x64-windows
 
     - name: Get Ninja
@@ -53,10 +54,7 @@ jobs:
       if: matrix.os == 'windows-latest'
       shell: cmd
       run: |
-        cmake -B build -S . -G Ninja ^
-          -DCMAKE_TOOLCHAIN_FILE=%cd%\vcpkg\scripts\buildsystems\vcpkg.cmake ^
-          -DCMAKE_BUILD_TYPE=Release ^
-          -DVCPKG_FEATURE_FLAGS=""
+        cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
 
     ## End Windows Build ##
 
