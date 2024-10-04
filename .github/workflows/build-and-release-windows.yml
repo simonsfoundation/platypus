@@ -1,0 +1,63 @@
+name: Build and Release PlatypusGui
+
+on:
+  push:
+    tags:
+      - 'never'
+
+jobs:
+  build:
+    name: Build and Upload Artifacts
+    runs-on: windows-latest
+    steps:
+    # Get dependencies
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Install dependencies via vcpkg
+      run: |
+        vcpkg.exe install opencv[contrib]:x64-windows
+
+    - name: Get Ninja
+      uses: seanmiddleditch/gha-setup-ninja@master
+
+    - name: Set up CMake
+      uses: jwlawson/actions-setup-cmake@v1
+      with:
+        cmake-version: '3.16'
+
+    # Install OpenCV via vcpkg
+    # Set up MSVC environment
+    - name: Set up MSVC environment
+      shell: cmd
+      run: |
+        for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set InstallDir=%%i
+        call "%InstallDir%\VC\Auxiliary\Build\vcvarsall.bat" x64
+
+    # Configure CMake (Windows)
+    - name: Configure CMake (Windows)
+      shell: cmd
+      run: |
+        cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+    # 4. Build the project
+    - name: Build PlatypusGui
+      run: cmake --build build --config Release --target PlatypusGui
+
+    - name: Deploy Qt Dependencies (windows)
+      shell: cmd
+      run: |
+        windeployqt.exe --compiler-runtime --dir build\deployment build\Release\PlatypusGui.exe
+
+    # 5. Archive the build output3
+    - name: Archive build output
+      run: Compress-Archive -Path build\deployment\* -DestinationPath PlatypusGui-windows.zip
+
+    # 6. Upload artifacts for release
+    - name: Upload Release Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: windows-latest-platypus
+        path: |
+          PlatypusGui-windows.zip
+

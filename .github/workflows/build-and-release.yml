@@ -11,17 +11,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
 
     steps:
     # Get dependencies
     - name: Checkout code
       uses: actions/checkout@v3
-
-    - name: Install dependencies via vcpkg
-      if : matrix.os == 'windows-latest'
-      run: |
-        vcpkg.exe install opencv[contrib]:x64-windows
 
     - name: Get Ninja
       uses: seanmiddleditch/gha-setup-ninja@master
@@ -36,26 +31,6 @@ jobs:
       uses: jurplel/install-qt-action@v4
       with:
         cache: true
-
-    ## Windows Build ##
-
-    # Install OpenCV via vcpkg
-    # Set up MSVC environment
-    - name: Set up MSVC environment
-      if: matrix.os == 'windows-latest'
-      shell: cmd
-      run: |
-        for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set InstallDir=%%i
-        call "%InstallDir%\VC\Auxiliary\Build\vcvarsall.bat" x64
-
-    # Configure CMake (Windows)
-    - name: Configure CMake (Windows)
-      if: matrix.os == 'windows-latest'
-      shell: cmd
-      run: |
-        cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
-
-    ## End Windows Build ##
 
     ## Linux setup ##
     - name: Install dependencies on Linux
@@ -83,9 +58,22 @@ jobs:
         export PATH="/opt/homebrew/opt/qt@5/bin:$PATH"
         cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
     ## End macOS setup ##
+
     # 4. Build the project
     - name: Build PlatypusGui
       run: cmake --build build --config Release --target PlatypusGui
+
+    - name: Deploy Qt Dependencies (mac)
+      if: matrix.os == 'macos-latest'
+      run: |
+        /usr/local/opt/qt@5/bin/macdeployqt build/PlatypusGui.app
+
+    # After macdeployqt
+    - name: Deploy OpenCV Libraries
+      if: matrix.os == 'macos-latest'
+      run: |
+        chmod +x deploy_opencv.sh
+        ./scripts/deploy_opencv.sh
 
     # 5. Archive the build output3
     - name: Archive build output
@@ -93,10 +81,7 @@ jobs:
       run: zip -r PlatypusGui-linux.zip build/PlatypusGui
     - name: Archive build output
       if: matrix.os == 'macos-latest'
-      run: zip -r PlatypusGui-mac.zip build/PlatypusGui
-    - name: Archive build output
-      if: matrix.os == 'windows-latest'
-      run: Compress-Archive -Path build\Release\PlatypusGui.exe -DestinationPath PlatypusGui-windows.zip
+      run: zip -r PlatypusGui-mac.zip build/PlatypusGui.app
 
     # 6. Upload artifacts for release
     - name: Upload Release Artifacts
@@ -106,5 +91,4 @@ jobs:
         path: |
           PlatypusGui-linux.zip
           PlatypusGui-mac.zip
-          PlatypusGui-windows.zip
 

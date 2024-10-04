@@ -11,7 +11,10 @@ set(CMAKE_VERBOSE_MAKEFILE YES)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 # Specify C++ standard
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
+set(OpenCV_STATIC ON)
+set(QT_STATIC=ON)
+add_definitions(-DQT_STATIC)
+set(QT_PLUGINS "")
 # Find the required Qt packages
 find_package(Qt5 5 REQUIRED COMPONENTS Core Gui Widgets Xml)
 # Configuration Options
@@ -46,7 +49,12 @@ file(GLOB_RECURSE SOURCES
 )
 
 # Add the executable
-add_executable(PlatypusGui ${SOURCES} src/platypus.qrc)
+if (APPLE)
+set(MACOSX_BUNDLE TRUE)
+  add_executable(PlatypusGui MACOSX_BUNDLE ${SOURCES} src/platypus.qrc)
+else()
+  add_executable(PlatypusGui ${SOURCES} src/platypus.qrc)
+endif()
 
 include(CheckIPOSupported)
 check_ipo_supported(RESULT supported OUTPUT error)
