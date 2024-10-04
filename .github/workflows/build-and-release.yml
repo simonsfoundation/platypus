@@ -63,17 +63,17 @@ jobs:
     - name: Build PlatypusGui
       run: cmake --build build --config Release --target PlatypusGui
 
-    - name: Deploy Qt Dependencies (mac)
-      if: matrix.os == 'macos-latest'
-      run: |
-        /usr/local/opt/qt@5/bin/macdeployqt build/PlatypusGui.app
+    #- name: Deploy Qt Dependencies (mac)
+    #  if: matrix.os == 'macos-latest'
+    #  run: |
+    #    /usr/local/opt/qt@5/bin/macdeployqt build/PlatypusGui.app
 
     # After macdeployqt
-    - name: Deploy OpenCV Libraries
-      if: matrix.os == 'macos-latest'
-      run: |
-        chmod +x ./scripts/deploy_opencv.sh
-        ./scripts/deploy_opencv.sh
+    #- name: Deploy OpenCV Libraries
+    #  if: matrix.os == 'macos-latest'
+    #  run: |
+    #    chmod +x ./scripts/deploy_opencv.sh
+    #    ./scripts/deploy_opencv.sh
 
     # 5. Archive the build output3
     - name: Archive build output

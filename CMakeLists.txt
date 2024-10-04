@@ -50,8 +50,9 @@ file(GLOB_RECURSE SOURCES
 
 # Add the executable
 if (APPLE)
-set(MACOSX_BUNDLE TRUE)
+  set(MACOSX_BUNDLE TRUE)
   add_executable(PlatypusGui MACOSX_BUNDLE ${SOURCES} src/platypus.qrc)
+  set_target_properties(PlatypusGui PROPERTIES MACOSX_BUNDLE_ICON_FILE "${CMAKE_CURRENT_SOURCE_DIR}/mac/AppIcon.icns")
 else()
   add_executable(PlatypusGui ${SOURCES} src/platypus.qrc)
 endif()
