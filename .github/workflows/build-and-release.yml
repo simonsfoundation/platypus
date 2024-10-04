@@ -87,7 +87,9 @@ jobs:
     # Configure CMake for macOS
     - name: Configure CMake (macOS)
       if: matrix.os == 'macos-latest'
-      run: cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
+      run: |
+        export PATH="/opt/homebrew/opt/qt@5/bin:$PATH"
+        cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
     ## End macOS setup ##
     # 4. Build the project
     - name: Build PlatypusGui
