@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(Platypus LANGUAGES CXX)
+project(Platypus
+VERSION 0.0.1
+LANGUAGES CXX)
 
 # Enable automatic processing of Qt's MOC, UIC, and RCC tools
 set(CMAKE_CXX_STANDARD 20)
@@ -32,12 +34,60 @@ find_package(OpenCV REQUIRED PATHS ${OpenCV_DIR} NO_DEFAULT_PATH)
 
 include(FetchContent)
 
-FetchContent_Declare(
-  platypus
-  GIT_REPOSITORY https://github.com/SteveBronder/platypus
-  GIT_TAG main
-  CMAKE_ARGS -DOpenCV_DIR=${OpenCV_DIR})
-FetchContent_MakeAvailable(platypus)
+add_library(platypus STATIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/platypus/CradleFunctions.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/platypus/DWT.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/platypus/FDCT.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/platypus/FFST.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/platypus/HaarDWT.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/platypus/MCA.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/platypus/Shearlet.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/platypus/TextureRemoval.cpp)
+
+target_include_directories(platypus PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>  # This tells CMake where to find the headers when installed
+    ${OpenCV_INCLUDE_DIRS})
+
+target_link_libraries(platypus PUBLIC ${OpenCV_LIBS})
+
+# Export the platypus target for use by other projects
+export(TARGETS platypus FILE platypusTargets.cmake)
+
+# Install the library and headers
+install(TARGETS platypus
+    EXPORT platypusTargets
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin)
+
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
+    DESTINATION include)
+
+# Install the export targets
+install(EXPORT platypusTargets
+    FILE platypusTargets.cmake
+    NAMESPACE platypus::
+    DESTINATION lib/cmake/platypus)
+
+# Create a ConfigVersion.cmake file
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/platypusConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY AnyNewerVersion)
+
+# Configure the Config.cmake file
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/platypusConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/platypusConfig.cmake"
+    INSTALL_DESTINATION lib/cmake/platypus)
+
+# Install the Config and ConfigVersion files
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/platypusConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/platypusConfigVersion.cmake"
+    DESTINATION lib/cmake/platypus)
 
 # Include directories for OpenCV and other dependencies if necessary
 include_directories(${OpenCV_INCLUDE_DIRS})
