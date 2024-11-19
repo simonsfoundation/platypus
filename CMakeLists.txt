@@ -102,7 +102,15 @@ file(GLOB_RECURSE SOURCES
 if (APPLE)
   set(MACOSX_BUNDLE TRUE)
   add_executable(PlatypusGui MACOSX_BUNDLE ${SOURCES} src/platypus.qrc)
-  set_target_properties(PlatypusGui PROPERTIES MACOSX_BUNDLE_ICON_FILE "${CMAKE_CURRENT_SOURCE_DIR}/mac/AppIcon.icns")
+  set_target_properties(PlatypusGui PROPERTIES 
+    MACOSX_BUNDLE TRUE
+    MACOSX_BUNDLE_BUNDLE_NAME "platypus"
+    MACOSX_RPATH TRUE
+    MACOSX_FRAMEWORK_IDENTIFIER com.host.target
+    XCODE_ATTRIBUTE_LD_RUNPATH_SEARCH_PATHS "@loader_path/Libraries"
+    XCODE_ATTRIBUTE_ENABLE_HARDENED_RUNTIME YES
+    MACOSX_BUNDLE_ICON_FILE "${CMAKE_CURRENT_SOURCE_DIR}/mac/AppIcon.icns"
+  )
 else()
   add_executable(PlatypusGui ${SOURCES} src/platypus.qrc)
 endif()
