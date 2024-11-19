@@ -3,7 +3,7 @@ name: Build and Release PlatypusGui
 on:
   push:
     tags:
-      - 'never'
+      - 'v*'
 
 jobs:
   build:
@@ -49,15 +49,11 @@ jobs:
       run: |
         windeployqt.exe --compiler-runtime --dir build\deployment build\Release\PlatypusGui.exe
 
-    # 5. Archive the build output3
-    - name: Archive build output
-      run: Compress-Archive -Path build\deployment\* -DestinationPath PlatypusGui-windows.zip
-
     # 6. Upload artifacts for release
     - name: Upload Release Artifacts
       uses: actions/upload-artifact@v3
       with:
         name: windows-latest-platypus
         path: |
-          PlatypusGui-windows.zip
+          build/PlatypusGui.exe
 
