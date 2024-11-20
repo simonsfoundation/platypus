@@ -3,6 +3,6 @@
   "version": "0.0.1",
   "dependencies": [
     "opencv4",
-    "qt5:x64-windows"
+    "qt5"
   ]
 }
