@@ -16,7 +16,7 @@ jobs:
 
     - name: Install dependencies via vcpkg
       run: |
-        vcpkg.exe install opencv[contrib]:x64-windows
+        vcpkg.exe install opencv[contrib]:x64-windows qt5-base
 
     - name: Get Ninja
       uses: seanmiddleditch/gha-setup-ninja@master
@@ -34,11 +34,6 @@ jobs:
         for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set InstallDir=%%i
         call "%InstallDir%\VC\Auxiliary\Build\vcvarsall.bat" x64
 
-    - name: Install Qt
-      uses: jurplel/install-qt-action@v4
-      with:
-        cache: true
-
     # Configure CMake (Windows)
     - name: Configure CMake (Windows)
       shell: cmd
@@ -52,11 +47,7 @@ jobs:
     - name: Deploy Qt Dependencies (windows)
       shell: cmd
       run: |
-        windeployqt.exe --compiler-runtime --dir build\deployment build\Release\PlatypusGui.exe
-
-    # 5. Archive the build output3
-    - name: Archive build output
-      run: Compress-Archive -Path build\deployment\* -DestinationPath PlatypusGui-windows.zip
+        windeployqt.exe build\PlatypusGui.exe --compiler-runtime
 
     # 6. Upload artifacts for release
     - name: Upload Release Artifacts
@@ -64,5 +55,5 @@ jobs:
       with:
         name: windows-latest-platypus
         path: |
-          PlatypusGui-windows.zip
+          ./build/PlatypusGui.exe
 

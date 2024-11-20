@@ -67,7 +67,7 @@ jobs:
       if: matrix.os == 'macos-latest'
       run: |
         export PATH="/opt/homebrew/opt/qt@5/bin:$PATH"
-        macdeployqt ./build/PlatypusGui.app -verbose=3  -always-overwrite -hardened-runtime -timestamp
+        macdeployqt ./build/PlatypusGui.app  -always-overwrite -hardened-runtime -timestamp
 
     # After macdeployqt
     #- name: Deploy OpenCV Libraries
