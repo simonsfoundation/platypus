@@ -2,7 +2,7 @@
   "name": "platypus",
   "version": "0.0.1",
   "dependencies": [
-    "opencv",
-    "qt5"
+    "opencv4[core,default-features,fs,gapi,highgui,intrinsics,jpeg,png,quirc,thread,tiff]",
+    "qt5[activeqt,core,declarative,essentials,imageformats,multimedia,svg,tools,translations]:x64-windows"
   ]
 }
