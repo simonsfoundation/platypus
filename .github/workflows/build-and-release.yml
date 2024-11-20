@@ -3,7 +3,7 @@ name: Build and Release PlatypusGui
 on:
   push:
     branches:
-      - main
+      - never
 
 jobs:
   build:
