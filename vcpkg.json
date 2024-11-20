@@ -4,9 +4,7 @@
   "dependencies": [
     {
       "name": "opencv4",
-      "default-features": false,
       "features": [
-        "core",
         "default-features",
         "fs",
         "gapi",
@@ -21,10 +19,8 @@
     },
     {
       "name": "qt5",
-      "default-features": false,
       "features": [
         "activeqt",
-        "core",
         "declarative",
         "essentials",
         "imageformats",
