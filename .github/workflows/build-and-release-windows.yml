@@ -44,6 +44,7 @@ jobs:
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgJsonGlob: 'vcpkg.json'
+          vcpkgGitCommitId: "b2cb0da531c2f1f740045bfe7c4dac59f0b2b69c"
       # On Windows runners, let's ensure to have the Developer Command Prompt environment setup correctly.
       # As used here the Developer Command Prompt created is targeting x64 and using the default the Windows SDK.
       - uses: ilammy/msvc-dev-cmd@v1
