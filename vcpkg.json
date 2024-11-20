@@ -2,7 +2,35 @@
   "name": "platypus",
   "version": "0.0.1",
   "dependencies": [
-    "opencv4[core,default-features,fs,gapi,highgui,intrinsics,jpeg,png,quirc,thread,tiff]",
-    "qt5[activeqt,core,declarative,essentials,imageformats,multimedia,svg,tools,translations]"
+    {
+      "name": "opencv4",
+      "features": [
+        "core",
+        "default-features",
+        "fs",
+        "gapi",
+        "highgui",
+        "intrinsics",
+        "jpeg",
+        "png",
+        "quirc",
+        "thread",
+        "tiff"
+      ]
+    },
+    {
+      "name": "qt5",
+      "features": [
+        "activeqt",
+        "core",
+        "declarative",
+        "essentials",
+        "imageformats",
+        "multimedia",
+        "svg",
+        "tools",
+        "translations"
+      ]
+    }
   ]
 }
