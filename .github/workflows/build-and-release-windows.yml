@@ -2,8 +2,8 @@ name: Build and Release PlatypusGui
 
 on:
   push:
-    tags:
-      - 'never'
+    branches:
+      - main
 
 jobs:
   build:
@@ -33,6 +33,11 @@ jobs:
       run: |
         for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set InstallDir=%%i
         call "%InstallDir%\VC\Auxiliary\Build\vcvarsall.bat" x64
+
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        cache: true
 
     # Configure CMake (Windows)
     - name: Configure CMake (Windows)
