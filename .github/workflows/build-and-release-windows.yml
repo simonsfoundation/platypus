@@ -15,8 +15,15 @@ jobs:
       uses: actions/checkout@v3
 
     - name: Install dependencies via vcpkg
-      run: |
-        vcpkg.exe install opencv[contrib]:x64-windows qt5-base
+      run: vcpkg.exe install --triplet x64-windows
+
+    - name: Cache vcpkg
+      uses: actions/cache@v3
+      with:
+        path: |
+          vcpkg
+          vcpkg_installed
+        key: ${{ runner.os }}-vcpkg-${{ hashFiles('vcpkg.json') }}
 
     - name: Get Ninja
       uses: seanmiddleditch/gha-setup-ninja@master
@@ -26,12 +33,11 @@ jobs:
       with:
         cmake-version: '3.16'
 
-    # Install OpenCV via vcpkg
-    # Set up MSVC environment
     - name: Set up MSVC environment
       shell: cmd
       run: |
-        for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set InstallDir=%%i
+        call "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath > vs_install_dir.txt
+        set /p InstallDir=<vs_install_dir.txt
         call "%InstallDir%\VC\Auxiliary\Build\vcvarsall.bat" x64
 
     # Configure CMake (Windows)
@@ -44,16 +50,17 @@ jobs:
     - name: Build PlatypusGui
       run: cmake --build build --config Release --target PlatypusGui
 
-    - name: Deploy Qt Dependencies (windows)
+    - name: Deploy Qt Dependencies (Windows)
       shell: cmd
       run: |
-        windeployqt.exe build\PlatypusGui.exe --compiler-runtime
+        set QT_DIR=C:\Qt\5.15.2\msvc2019_64
+        set PATH=%QT_DIR%\bin;%PATH%
+        windeployqt.exe --compiler-runtime --dir build\deployment build\PlatypusGui.exe
 
     # 6. Upload artifacts for release
     - name: Upload Release Artifacts
       uses: actions/upload-artifact@v3
       with:
         name: windows-latest-platypus
-        path: |
-          ./build/PlatypusGui.exe
+        path: build\deployment\PlatypusGui.exe
 
