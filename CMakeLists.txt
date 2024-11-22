@@ -14,7 +14,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 # Specify C++ standard
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(OpenCV_STATIC ON)
-set(QT_STATIC=ON)
+set(QT_STATIC ON)
 add_definitions(-DQT_STATIC)
 set(QT_PLUGINS "")
 # Find the required Qt packages
@@ -47,9 +47,9 @@ add_library(platypus STATIC
 target_include_directories(platypus PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>  # This tells CMake where to find the headers when installed
+    PRIVATE      
     ${OpenCV_INCLUDE_DIRS})
-
-target_link_libraries(platypus PUBLIC ${OpenCV_LIBS})
+target_link_libraries(platypus PRIVATE ${OpenCV_LIBS})
 
 # Export the platypus target for use by other projects
 export(TARGETS platypus FILE platypusTargets.cmake)

@@ -2,58 +2,77 @@ name: Build and Release PlatypusGui
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
 
 jobs:
   build:
     name: Build and Upload Artifacts
     runs-on: windows-latest
+    env:
+      # Indicates the location of the vcpkg as a Git submodule of the project repository.
+      # Not using "VCPKG_ROOT" because a variable with the same name is defined in the VS's
+      # Developer Command Prompt environment in VS 2022 17.6, which would override this one
+      # if it had the same name.
+      _VCPKG_: ${{ github.workspace }}/vcpkg
+      # Tells vcpkg where binary packages are stored.
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg/bincache
+      # Let's use GitHub Action cache as storage for the vcpkg Binary Caching feature.
+      VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
+      NUMBER_OF_PROCESSORS: 4
     steps:
-    # Get dependencies
-    - name: Checkout code
-      uses: actions/checkout@v3
+      # Set env vars needed for vcpkg to leverage the GitHub Action cache as a storage
+      # for Binary Caching.
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
-    - name: Install dependencies via vcpkg
-      run: |
-        vcpkg.exe install opencv[contrib]:x64-windows
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: "Create directory '${{ env.VCPKG_DEFAULT_BINARY_CACHE }}'"
+        run: mkdir -p $VCPKG_DEFAULT_BINARY_CACHE
+        shell: bash
 
-    - name: Get Ninja
-      uses: seanmiddleditch/gha-setup-ninja@master
+      # Setup the build machine with the most recent versions of CMake and Ninja. Both are cached if not already: on subsequent runs both will be quickly restored from GitHub cache service.
+      - name: Get CMake
+        uses: lukka/get-cmake@latest
+      - name: Get Ninja
+        uses: seanmiddleditch/gha-setup-ninja@master
+      # Restore vcpkg from the GitHub Action cache service. Note that packages are restored by vcpkg's binary caching
+      # when it is being run afterwards by CMake.
+      - name: Restore from cache and setup vcpkg executable and data files.
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgJsonGlob: 'vcpkg.json'
+          vcpkgGitCommitId: "b2cb0da531c2f1f740045bfe7c4dac59f0b2b69c"
+      # On Windows runners, let's ensure to have the Developer Command Prompt environment setup correctly.
+      # As used here the Developer Command Prompt created is targeting x64 and using the default the Windows SDK.
+      - uses: ilammy/msvc-dev-cmd@v1
 
-    - name: Set up CMake
-      uses: jwlawson/actions-setup-cmake@v1
-      with:
-        cmake-version: '3.16'
+      # Configure CMake (Windows)
+      - name: Configure CMake (Windows)
+        shell: cmd
+        run: |
+          cmake --preset ninja-multi-vcpkg -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
 
-    # Install OpenCV via vcpkg
-    # Set up MSVC environment
-    - name: Set up MSVC environment
-      shell: cmd
-      run: |
-        for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set InstallDir=%%i
-        call "%InstallDir%\VC\Auxiliary\Build\vcvarsall.bat" x64
+      # 4. Build the project
+      - name: Build PlatypusGui
+        run: cmake --preset ninja-vcpkg-release --build build --config Release --target PlatypusGui
 
-    # Configure CMake (Windows)
-    - name: Configure CMake (Windows)
-      shell: cmd
-      run: |
-        cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Deploy Qt Dependencies (Windows)
+        shell: cmd
+        run: |
+          set QT_DIR=C:\Qt\5.15.2\msvc2019_64
+          set PATH=%QT_DIR%\bin;%PATH%
+          windeployqt.exe --compiler-runtime --dir build\deployment build\PlatypusGui.exe
 
-    # 4. Build the project
-    - name: Build PlatypusGui
-      run: cmake --build build --config Release --target PlatypusGui
-
-    - name: Deploy Qt Dependencies (windows)
-      shell: cmd
-      run: |
-        windeployqt.exe --compiler-runtime --dir build\deployment build\Release\PlatypusGui.exe
-
-    # 6. Upload artifacts for release
-    - name: Upload Release Artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: windows-latest-platypus
-        path: |
-          build/PlatypusGui.exe
+      # 6. Upload artifacts for release
+      - name: Upload Release Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-latest-platypus
+          path: build\deployment\PlatypusGui.exe
 

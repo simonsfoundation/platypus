@@ -1,0 +1,32 @@
+{
+  "name": "platypus",
+  "version": "0.0.1",
+  "dependencies": [
+    {
+      "name": "opencv4",
+      "features": [
+        "eigen",
+        "ffmpeg",
+        "highgui",
+        "intrinsics",
+        "jpeg",
+        "png",
+        "tiff"
+      ]
+    },
+    {
+      "name": "qt5",
+      "features": [
+        "activeqt",
+        "declarative",
+        "imageformats",
+        "multimedia",
+        "quickcontrols",
+        "quickcontrols2",
+        "svg",
+        "tools",
+        "extras"
+      ]
+    }
+  ]
+}
