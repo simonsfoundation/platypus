@@ -60,7 +60,8 @@ jobs:
 
       # 4. Build the project
       - name: Build PlatypusGui
-        run: cmake --preset ninja-vcpkg-release --build build --config Release --target PlatypusGui
+        run: |
+          cd build && ninja PlatypusGui
 
       - name: Deploy Qt Dependencies (Windows)
         shell: cmd
