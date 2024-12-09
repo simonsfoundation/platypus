@@ -13,9 +13,11 @@ set(CMAKE_VERBOSE_MAKEFILE YES)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 # Specify C++ standard
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(OpenCV_STATIC ON)
-set(QT_STATIC ON)
-add_definitions(-DQT_STATIC)
+if (not WIN32)
+  set(OpenCV_STATIC ON)
+  set(QT_STATIC ON)
+  add_definitions(-DQT_STATIC)
+endif()
 set(QT_PLUGINS "")
 # Find the required Qt packages
 find_package(Qt5 5 REQUIRED COMPONENTS Core Gui Widgets Xml)
@@ -111,6 +113,8 @@ if (APPLE)
     XCODE_ATTRIBUTE_ENABLE_HARDENED_RUNTIME YES
     MACOSX_BUNDLE_ICON_FILE "${CMAKE_CURRENT_SOURCE_DIR}/mac/AppIcon.icns"
   )
+elseif(WIN32)
+  add_executable(PlatypusGui WIN32 ${SOURCES} src/platypus.qrc)
 else()
   add_executable(PlatypusGui ${SOURCES} src/platypus.qrc)
 endif()
