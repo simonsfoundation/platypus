@@ -56,7 +56,7 @@ jobs:
       if: matrix.os == 'macos-latest'
       run: |
         export PATH="/opt/homebrew/opt/qt@5/bin:$PATH"
-        cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
+        cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 -DBUILD_APPLE_APP=ON
     ## End macOS setup ##
 
     # 4. Build the project

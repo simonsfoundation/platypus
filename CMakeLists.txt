@@ -5,7 +5,7 @@ VERSION 0.0.1
 LANGUAGES CXX)
 
 # Enable automatic processing of Qt's MOC, UIC, and RCC tools
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
@@ -24,6 +24,7 @@ set(QT_PLUGINS "")
 find_package(Qt5 5 REQUIRED COMPONENTS Core Gui Widgets Xml)
 # Configuration Options
 option(BUILD_PHOTOSHOP_PLUGIN "Build the Photoshop plugin" OFF)
+option(BUILD_APPLE_APP "Build the Apple App instead of an executable" OFF)
 # Find OpenCV
 find_package(OpenCV)
 # If still not found, provide an error message
@@ -50,7 +51,7 @@ add_library(platypus STATIC
 target_include_directories(platypus PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>  # This tells CMake where to find the headers when installed
-    PRIVATE      
+    PRIVATE
     ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(platypus PRIVATE ${OpenCV_LIBS})
 
@@ -102,10 +103,10 @@ file(GLOB_RECURSE SOURCES
 )
 
 # Add the executable
-if (APPLE)
+if (BUILD_APPLE_APP)
   set(MACOSX_BUNDLE TRUE)
   add_executable(PlatypusGui MACOSX_BUNDLE ${SOURCES} src/platypus.qrc)
-  set_target_properties(PlatypusGui PROPERTIES 
+  set_target_properties(PlatypusGui PROPERTIES
     MACOSX_BUNDLE TRUE
     MACOSX_BUNDLE_BUNDLE_NAME "platypus"
     MACOSX_RPATH TRUE

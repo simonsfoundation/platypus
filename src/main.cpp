@@ -1,4 +1,4 @@
-#include <memory_resource>
+//#include <memory_resource>
 #include <mainWindow.h>
 #include <imageManager.h>
 #include <project.h>
@@ -16,12 +16,12 @@ int main(int argc, char *argv[])
 	QCoreApplication::setOrganizationName("Digital Film Tools");
 	QCoreApplication::setOrganizationDomain("com.digitalfilmtools");
 	{
-        #if defined(Q_OS_MACX)
-            QString pluginsPath = QFileInfo(argv[0]).path() + "/../Resources/plugins";
-        #else
-            QString pluginsPath = QFileInfo(argv[0]).path() + "/plugins";
-        #endif
-		QCoreApplication::setLibraryPaths(QStringList() << pluginsPath);
+    #if defined(Q_OS_MACX)
+        QString pluginsPath = QFileInfo(argv[0]).path() + "/../Resources/plugins";
+    #else
+        QString pluginsPath = QFileInfo(argv[0]).path() + "/plugins";
+    #endif
+		QCoreApplication::addLibraryPath(pluginsPath);
 	}
 
 	QApplication a(argc, argv);
