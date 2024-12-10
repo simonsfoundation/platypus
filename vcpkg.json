@@ -28,6 +28,9 @@
         "extras",
         "tools"
       ]
+    },
+    {
+      "name": "qttools"
     }
   ]
 }
