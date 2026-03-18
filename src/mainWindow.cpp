@@ -11,6 +11,7 @@
 #include <removeSource.h>
 #include <detectCradleDialog.h>
 #include <slider.h>
+#include <textureRemovalStatus.h>
 #include <util.hpp>
 #include <platypus/CradleFunctions.h>
 #include <platypus/TextureRemoval.h>
@@ -1454,18 +1455,30 @@ void MainWindow::onRemoveTexture()
 
     try
     {
-        TextureRemoval::textureRemove(resultMat, maskMat, outMat, Project::activeProject()->markedSegments());
+        TextureRemoval::Status status = TextureRemoval::textureRemove(
+            resultMat, maskMat, outMat, Project::activeProject()->markedSegments());
+        if (status != TextureRemoval::Status::kInsufficientSamples)
+            outMat.copyTo(resultMat);
+
+        CradleFunctions::setCallbacks(nullptr);
+        endProgress();
+
+        TextureRemovalMessage message = textureRemovalMessage(status);
+        if (message.shouldDisplay()) {
+            QMessageBox box(message.icon, message.title, message.body,
+                            QMessageBox::Ok, this);
+            box.exec();
+        }
     }
     catch (const std::exception &e)
     {
+        CradleFunctions::setCallbacks(nullptr);
+        endProgress();
         QMessageBox::critical(this, QCoreApplication::applicationName(), e.what());
+        return;
     }
 
-    outMat.copyTo(resultMat);
     source->invalidate();
-
-    CradleFunctions::setCallbacks(nullptr);
-    endProgress();
 }
 
 void MainWindow::onHelp()

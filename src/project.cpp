@@ -75,6 +75,10 @@ void Project::load(const QByteArray &data)
 						}
 					}
 				}
+				else if (reader.name() == QLatin1String("image"))
+				{
+					setImagePath(reader.readElementText());
+				}
 				else
 				{
 					reader.skipCurrentElement();

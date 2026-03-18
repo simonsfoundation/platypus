@@ -7,7 +7,7 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QSettings>
 
-bool s_debug_mode = true;
+extern bool s_debug_mode;
 
 int main(int argc, char *argv[])
 {

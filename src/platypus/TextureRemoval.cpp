@@ -16,6 +16,7 @@
 #include <platypus/MCA.h>
 #include <platypus/FFST.h>
 #include <opencv2/flann.hpp>
+#include <memory>
 #include <random>
 
 #define PI 3.1415927
@@ -38,6 +39,16 @@ namespace TextureRemoval{
 	const int NR_NEIGHBOURS = 5;	//Nr neighbors for Nearest-neighbour (NN) search	
 	const int max_samples = 10000;	//Maximum number of samples to be processed for the post-inference algo
 
+	namespace {
+	Status maxStatus(Status lhs, Status rhs) {
+		return static_cast<int>(lhs) >= static_cast<int>(rhs) ? lhs : rhs;
+	}
+
+	void promoteStatus(Status &current, Status candidate) {
+		current = maxStatus(current, candidate);
+	}
+	}  // namespace
+
 	//Shearlet decomposition horizontal/vertical angle parameters
 	int target_v[] = { 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1 };
 	int target_h[] = { 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -47,12 +58,13 @@ namespace TextureRemoval{
 	float buffer[block_size*block_size];
 
 	//Entry point to texture separation
-	void textureRemove(
+	Status textureRemove(
 		cv::Mat &img,								//Input image for wood grain separation
 		cv::Mat &mask_orig,							//Mask component, as returned by cradle removal step
 		cv::Mat &out,								//Result image is stored here
 		const CradleFunctions::MarkedSegments &ms	//Processing information, as returned by cradle removal step
 	){
+		Status status = Status::kSuccess;
 
 		//Create borders for image
 		cv::Mat in, mask, piecemark;
@@ -167,7 +179,7 @@ namespace TextureRemoval{
 		}
 		
 		if (canceled)
-			return;
+			return status;
 
 		cartoon = in - texture;
 
@@ -330,7 +342,7 @@ namespace TextureRemoval{
 		}
 		processed++;
 		if (canceled)
-			return;
+			return status;
 		full_samples.resize(fsample_pos);
 
 		std::vector<int> sample_pos(sample_type.size());
@@ -365,8 +377,12 @@ namespace TextureRemoval{
 
 		//Normalize non-cradled components
 		std::vector<float> mean_h, mean_v, var_h, var_v;
-		normalizeNonCradle(sample_select[0], mean_h, var_h);	//Get normalization of horizontal non-cradle samples
-		normalizeNonCradle(sample_select[1], mean_v, var_v);	//Get normalization of vertical non-cradle samples
+		const bool has_h_noncradle = !sample_select[0].empty();
+		const bool has_v_noncradle = !sample_select[1].empty();
+		if (has_h_noncradle)
+			normalizeNonCradle(sample_select[0], mean_h, var_h);	//Get normalization of horizontal non-cradle samples
+		if (has_v_noncradle)
+			normalizeNonCradle(sample_select[1], mean_v, var_v);	//Get normalization of vertical non-cradle samples
 
 		//Train separation model on each cradle piece
 		cradle_model_fitting model;
@@ -382,15 +398,21 @@ namespace TextureRemoval{
 
 				//Normalize the data & choose reference non-cradle data set
 				if (sample_type[mod_sel] == CradleFunctions::HORIZONTAL_DIR){
+					if (!has_h_noncradle)
+						return Status::kInsufficientSamples;
 					normalizeSamples(sample_select[mod_sel], mean_h, var_h);
 					ncdata = sample_select[0];
 				}
 				else if (sample_type[mod_sel] == CradleFunctions::VERTICAL_DIR){
+					if (!has_v_noncradle)
+						return Status::kInsufficientSamples;
 					normalizeSamples(sample_select[mod_sel], mean_v, var_v);
 					ncdata = sample_select[1];
 				}else{
 					//Cross section
 				}
+				if (ncdata.empty())
+					return Status::kInsufficientSamples;
 
 				//Train the model
 				model = gibbsSampling(sample_select[mod_sel], ncdata);
@@ -504,29 +526,34 @@ namespace TextureRemoval{
 						}
 						//Drop unused elements
 						clusters.resize(sample_pos);
-						bool clustering;
-						cv::flann::GenericIndex< cvflann::L2<float> > *kdTree; // The flann KD searching tree
-
-						cv::Mat clusters_mat(clusters.size(), clusters[0].size(), CV_32F);
-						if (clusters.size() > 0){
-							cv::Mat clusters_mat(clusters.size(), clusters[0].size(), CV_32F);
+						bool clustering = false;
+						int neighbor_count = 0;
+						cv::Mat clusters_mat;
+						std::unique_ptr<cv::flann::GenericIndex<cvflann::L2<float>>> kdTree;
+						if (!clusters.empty()) {
+							clusters_mat.create(int(clusters.size()), int(clusters[0].size()), CV_32F);
 							for (int i = 0; i < clusters_mat.rows; i++){
 								for (int j = 0; j < clusters_mat.cols; j++){
 									clusters_mat.at<float>(i, j) = clusters[i][j];
 								}
 							}
-							clustering = true;
-						}
-						else{
-							clustering = false;
-						}
 
-						//Create KD Tree
-						kdTree = new cv::flann::GenericIndex< cvflann::L2<float> >(clusters_mat, cvflann::KDTreeIndexParams(4));
+							neighbor_count = std::min<int>(NR_NEIGHBOURS, clusters_mat.rows);
+							if (neighbor_count > 0) {
+								kdTree.reset(new cv::flann::GenericIndex<cvflann::L2<float>>(
+									clusters_mat, cvflann::KDTreeIndexParams(4)));
+								clustering = true;
+								if (neighbor_count < NR_NEIGHBOURS)
+									promoteStatus(status, Status::kLimitedLocalSamples);
+							}
+						}
+						if (!clustering)
+							promoteStatus(status, Status::kFallbackModel);
 
 						//Post inference for subsampled coefficients
 						std::vector<std::vector<float>> clusters_diffs;
-						post_inference(model, clusters, ncdata, clusters_diffs);
+						if (!clusters.empty())
+							post_inference(model, clusters, ncdata, clusters_diffs);
 						
 						//Look up all coefficients
 						sample_pos = 0;
@@ -599,10 +626,14 @@ namespace TextureRemoval{
 						//Normalize the data & choose reference non-cradle data set
 						if (samples.size() != 0){
 							if (sample_type[mod_sel] == CradleFunctions::HORIZONTAL_DIR){
+								if (!has_h_noncradle)
+									return Status::kInsufficientSamples;
 								normalizeSamples(samples, mean_h, var_h);
 								ncdata = sample_select[0];
 							}
 							else if (sample_type[mod_sel] == CradleFunctions::VERTICAL_DIR){
+								if (!has_v_noncradle)
+									return Status::kInsufficientSamples;
 								normalizeSamples(samples, mean_v, var_v);
 								ncdata = sample_select[1];
 							}
@@ -613,6 +644,8 @@ namespace TextureRemoval{
 
 						std::vector<std::vector<float>> diffs;
 						if (samples.size() != 0){
+							if (ncdata.empty())
+								return Status::kInsufficientSamples;
 							if (clustering){
 								//Convert samples to a cv::Mat
 								cv::Mat samples_mat(samples.size(), samples[0].size(), CV_32F);
@@ -632,23 +665,23 @@ namespace TextureRemoval{
 								cv::Mat distances; //In this mat Kd-Tree return the distances for each nearest neighbour
 
 								//Initialize structures
-								neighborsIdx.create(cv::Size(NR_NEIGHBOURS, samples_mat.rows), CV_32SC1);
-								distances.create(cv::Size(NR_NEIGHBOURS, samples_mat.rows), CV_32FC1);
+								neighborsIdx.create(cv::Size(neighbor_count, samples_mat.rows), CV_32SC1);
+								distances.create(cv::Size(neighbor_count, samples_mat.rows), CV_32FC1);
 
 								//Run KD search
-								kdTree->knnSearch(samples_mat, neighborsIdx, distances, NR_NEIGHBOURS, cvflann::SearchParams(8));
+								kdTree->knnSearch(samples_mat, neighborsIdx, distances, neighbor_count, cvflann::SearchParams(8));
 
 								for (int i = 0; i < samples.size(); i++){
 									//Get weights
-									std::vector<float> weights(NR_NEIGHBOURS);
+									std::vector<float> weights(neighbor_count);
 									float sumweight = 0;
-									for (int j = 0; j < NR_NEIGHBOURS; j++){
+									for (int j = 0; j < neighbor_count; j++){
 										weights[j] = 1.0 / (1 + distances.at<float>(i, j));
 										sumweight += weights[j];
 									}
 
 									//Get interpolated decomposition
-									for (int k = 0; k < NR_NEIGHBOURS; k++){
+									for (int k = 0; k < neighbor_count; k++){
 										float cweight = weights[k] / sumweight;
 										for (int j = 0; j < samples[i].size(); j++){
 											diffs[i][j] += clusters_diffs[neighborsIdx.at<int>(i, k)][j] * cweight;
@@ -758,6 +791,7 @@ namespace TextureRemoval{
 			//Remove padding
 			out = out(cv::Range(overlap / 2, N - overlap / 2), cv::Range(overlap / 2, M - overlap / 2));
 		}
+		return status;
 	}
 
 	void post_inference(cradle_model_fitting &model, std::vector<std::vector<float>> &c, std::vector<std::vector<float>> &nc, std::vector<std::vector<float>> &difference){

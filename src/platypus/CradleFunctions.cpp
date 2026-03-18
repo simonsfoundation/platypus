@@ -3486,6 +3486,13 @@ namespace CradleFunctions{
 			output << ms.piece_middle[i].x << " " << ms.piece_middle[i].y << std::endl;
 		}
 
+		//piece_type
+		output << ms.piece_type.size() << std::endl;
+		for (int i = 0; i < ms.piece_type.size(); i++){
+			output << ms.piece_type[i] << " ";
+		}
+		output << std::endl;
+
 		//write out segment mask file
 		output << ms.piece_mask.rows << " " << ms.piece_mask.cols << std::endl;
 		for (int i = 0; i < ms.piece_mask.rows; i++){
@@ -3543,6 +3550,13 @@ namespace CradleFunctions{
 		ms.piece_middle = std::vector<cv::Point2i>(tmp1);
 		for (int i = 0; i < tmp1; i++){
 			infile >> ms.piece_middle[i].x >> ms.piece_middle[i].y;
+		}
+
+		//piece_type
+		infile >> tmp1;
+		ms.piece_type = std::vector<int>(tmp1);
+		for (int i = 0; i < tmp1; i++){
+			infile >> ms.piece_type[i];
 		}
 
 		//mask segment file

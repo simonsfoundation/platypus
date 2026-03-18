@@ -4,6 +4,8 @@ project(Platypus
 VERSION 0.0.1
 LANGUAGES CXX)
 
+include(CTest)
+
 # Enable automatic processing of Qt's MOC, UIC, and RCC tools
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_AUTOMOC ON)
@@ -45,8 +47,6 @@ if(NOT OpenCV_FOUND)
         "    Linux:  sudo apt-get install libopencv-dev\n"
         "    Windows: use vcpkg (see readme.md)\n")
 endif()
-
-include(FetchContent)
 
 add_library(platypus STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/platypus/CradleFunctions.cpp
@@ -106,16 +106,24 @@ install(FILES
 # Include directories for OpenCV and other dependencies if necessary
 include_directories(${OpenCV_INCLUDE_DIRS})
 
-# Collect all source and header files
-file(GLOB_RECURSE SOURCES
-    src/*.cpp
-    src/*.h
+file(GLOB GUI_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
 )
+list(REMOVE_ITEM GUI_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
+
+add_library(platypus_gui STATIC ${GUI_SOURCES} src/platypus.qrc)
+target_include_directories(platypus_gui PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_BINARY_DIR}
+)
+target_link_libraries(platypus_gui PUBLIC
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent ${OpenCV_LIBS} platypus)
 
 # Add the executable
 if (BUILD_APPLE_APP)
   set(MACOSX_BUNDLE TRUE)
-  add_executable(PlatypusGui MACOSX_BUNDLE ${SOURCES} src/platypus.qrc)
+  add_executable(PlatypusGui MACOSX_BUNDLE src/main.cpp)
   set_target_properties(PlatypusGui PROPERTIES
     MACOSX_BUNDLE TRUE
     MACOSX_BUNDLE_BUNDLE_NAME "platypus"
@@ -126,9 +134,9 @@ if (BUILD_APPLE_APP)
     MACOSX_BUNDLE_ICON_FILE "${CMAKE_CURRENT_SOURCE_DIR}/mac/AppIcon.icns"
   )
 elseif(WIN32)
-  add_executable(PlatypusGui WIN32 ${SOURCES} src/platypus.qrc)
+  add_executable(PlatypusGui WIN32 src/main.cpp)
 else()
-  add_executable(PlatypusGui ${SOURCES} src/platypus.qrc)
+  add_executable(PlatypusGui src/main.cpp)
 endif()
 
 include(CheckIPOSupported)
@@ -141,9 +149,7 @@ else()
     message(STATUS "IPO / LTO not supported: <${error}>")
 endif()
 
-# Link against Qt and OpenCV libraries
-target_link_libraries(PlatypusGui PRIVATE
-  Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent ${OpenCV_LIBS} platypus)
+target_link_libraries(PlatypusGui PRIVATE platypus_gui)
 
 # Only find and link xcb on Linux
 if(UNIX AND NOT APPLE)
@@ -151,13 +157,58 @@ if(UNIX AND NOT APPLE)
   target_link_libraries(PlatypusGui PRIVATE xcb)
 endif()
 
-# Add include directories if needed
-target_include_directories(PlatypusGui PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_BINARY_DIR} # For generated files
-)
-
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/installer/payload/files/user_guide.pdf ${CMAKE_CURRENT_BINARY_DIR}/user_guide.pdf COPYONLY)
+
+if (BUILD_TESTING)
+  include(FetchContent)
+  FetchContent_Declare(
+      googletest
+      URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.zip
+      DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+  )
+  set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(googletest)
+  include(GoogleTest)
+
+  add_executable(platypus_backend_tests
+      tests/backend_tests.cpp
+      tests/test_helpers.cpp
+  )
+  target_include_directories(platypus_backend_tests PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests
+  )
+  target_compile_definitions(platypus_backend_tests PRIVATE
+      PLATYPUS_TEST_IMAGE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/images"
+  )
+  target_link_libraries(platypus_backend_tests PRIVATE
+      GTest::gtest_main
+      Qt6::Core
+      ${OpenCV_LIBS}
+      platypus
+  )
+  gtest_discover_tests(platypus_backend_tests)
+
+  add_executable(platypus_qt_tests
+      tests/qt_test_main.cpp
+      tests/qt_tests.cpp
+      tests/test_helpers.cpp
+  )
+  target_include_directories(platypus_qt_tests PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests
+  )
+  target_compile_definitions(platypus_qt_tests PRIVATE
+      PLATYPUS_TEST_IMAGE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/images"
+  )
+  target_link_libraries(platypus_qt_tests PRIVATE
+      GTest::gtest
+      Qt6::Core Qt6::Gui Qt6::Widgets
+      ${OpenCV_LIBS}
+      platypus_gui
+  )
+  gtest_discover_tests(platypus_qt_tests
+      PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  )
+endif()
 
 # Handle other dependencies like libjpeg, libtiff, and zlib if necessary
 # find_package(JPEG REQUIRED)

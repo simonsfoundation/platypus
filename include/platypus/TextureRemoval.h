@@ -1,3 +1,6 @@
+ #ifndef PLATYPUS_TEXTUREREMOVAL_H
+ #define PLATYPUS_TEXTUREREMOVAL_H
+
 /*
 * Copyright (c) 2016, Gabor Adam Fodor <fogggab@yahoo.com>
 * All rights reserved.
@@ -22,6 +25,13 @@
 **/
 
 namespace TextureRemoval{
+
+	enum class Status {
+		kSuccess,
+		kLimitedLocalSamples,
+		kFallbackModel,
+		kInsufficientSamples
+	};
 	
 	const int VERTICAL = 0;
 	const int HORIZONTAL = 1;
@@ -50,7 +60,7 @@ namespace TextureRemoval{
 	);
 
 	//Entry point to texture separation
-	void textureRemove(
+	Status textureRemove(
 		cv::Mat &in,								//Input image for wood grain separation
 		cv::Mat &mask,								//Mask component, as returned by cradle removal step
 		cv::Mat &out,								//Result image is stored here
@@ -81,3 +91,5 @@ namespace TextureRemoval{
 	std::vector<float> mvnpdf(std::vector<std::vector<float>> &X, std::vector<float> &mean, cv::Mat &covar);
 	std::vector<float> mvnpdf(std::vector<std::vector<float>> &X, cv::Mat &mean, cv::Mat &covar);
 }
+
+#endif
