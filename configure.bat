@@ -106,10 +106,17 @@ echo.
 echo Configuration complete!
 echo.
 echo To build:
-echo   cmake --build build --target PlatypusGui
+echo   cmake --build build --config Release --target PlatypusGui
 echo.
-echo To run:
-echo   build\PlatypusGui.exe
+echo To package an installer locally:
+echo   powershell -ExecutionPolicy Bypass -File scripts\windows_package.ps1 -BuildDir build -Configuration Release -PackageDir build\package
+echo.
+echo To package and sign locally:
+echo   copy scripts\windows_sign_metadata.sample.json scripts\windows_sign_metadata.local.json
+echo   powershell -ExecutionPolicy Bypass -File scripts\windows_package.ps1 -BuildDir build -Configuration Release -PackageDir build\package -Sign -SigningMetadataPath scripts\windows_sign_metadata.local.json
+echo.
+echo Installer output:
+echo   build\package\Platypus-<version>-windows-x64-setup.exe
 echo.
 echo Subsequent runs will be fast (packages cached at %VCPKG_CACHE_DIR%).
 

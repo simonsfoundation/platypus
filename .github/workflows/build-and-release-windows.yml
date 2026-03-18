@@ -1,14 +1,20 @@
-name: Build and Release PlatypusGui
+name: Build and Release Platypus Windows Installer
 
 on:
+  workflow_dispatch:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  id-token: write
 
 jobs:
   build:
-    name: Build and Upload Artifacts
-    runs-on: windows-latest
+    name: Build, Sign, and Release Windows Installer
+    runs-on: windows-2022
+    environment: release-windows
     env:
       # Indicates the location of the vcpkg as a Git submodule of the project repository.
       # Not using "VCPKG_ROOT" because a variable with the same name is defined in the VS's
@@ -52,27 +58,81 @@ jobs:
       # As used here the Developer Command Prompt created is targeting x64 and using the default the Windows SDK.
       - uses: ilammy/msvc-dev-cmd@v1
 
-      # Configure CMake (Windows)
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+
+      - name: Install Artifact Signing Client Tools
+        shell: pwsh
+        run: |
+          ./scripts/windows_install_artifact_signing_tools.ps1
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
       - name: Configure CMake (Windows)
         shell: cmd
         run: |
-          cmake --preset ninja-multi-vcpkg -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
+          set PACKAGE_VERSION=0.0.1-local
+          if "%GITHUB_REF_TYPE%"=="tag" set PACKAGE_VERSION=%GITHUB_REF_NAME:v=%
+          cmake --preset ninja-multi-vcpkg -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DPLATYPUS_PACKAGE_VERSION_OVERRIDE=%PACKAGE_VERSION%
 
-      # 4. Build the project
-      - name: Build PlatypusGui
+      - name: Write Trusted Signing Metadata
+        shell: pwsh
         run: |
-          cd build && ninja PlatypusGui
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          @"
+          {
+            "Endpoint": "${{ vars.TRUSTED_SIGNING_ENDPOINT }}",
+            "CodeSigningAccountName": "${{ vars.TRUSTED_SIGNING_ACCOUNT_NAME }}",
+            "CertificateProfileName": "${{ vars.TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME }}",
+            "CorrelationId": "${{ github.run_id }}",
+            "ExcludeCredentials": [
+              "EnvironmentCredential",
+              "ManagedIdentityCredential",
+              "WorkloadIdentityCredential",
+              "SharedTokenCacheCredential",
+              "VisualStudioCredential",
+              "VisualStudioCodeCredential",
+              "AzurePowerShellCredential",
+              "AzureDeveloperCliCredential",
+              "InteractiveBrowserCredential"
+            ]
+          }
+          "@ | Set-Content -Path build\trusted-signing-metadata.json -Encoding utf8NoBOM
 
-      - name: Deploy Qt Dependencies (Windows)
-        shell: cmd
+      - name: Build and Package Windows Installer
+        shell: pwsh
         run: |
-          set PATH=%PATH%;%CD%\vcpkg_installed\x64-windows\tools\qttools\bin
-          windeployqt.exe --compiler-runtime --dir build\deployment build\PlatypusGui.exe
+          ./scripts/windows_package.ps1 `
+            -BuildDir build `
+            -Configuration Release `
+            -PackageDir build\package `
+            -Sign `
+            -SigningMetadataPath build\trusted-signing-metadata.json
 
-      # 6. Upload artifacts for release
-      - name: Upload Release Artifacts
+      - name: Upload Installer Artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: windows-latest-platypus
-          path: build\deployment\PlatypusGui.exe
+          name: platypus-windows-installer
+          path: |
+            build\package\*.exe
+            build\package\*.sha256
 
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $installer = Get-ChildItem -Path build\package -Filter *.exe | Select-Object -First 1
+          $checksum = Get-ChildItem -Path build\package -Filter *.sha256 | Select-Object -First 1
+          if (-not $installer) { throw "Installer artifact not found." }
+          if (-not $checksum) { throw "Checksum artifact not found." }
+          gh release create $tag $installer.FullName $checksum.FullName --title "Platypus $tag" --notes "Signed Windows installer for $tag"

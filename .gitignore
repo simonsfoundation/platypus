@@ -38,3 +38,6 @@ vcpkg/
 .claude/
 .codex/
 *.log
+scripts/windows_sign_metadata.local.json
+.env
+.venv/

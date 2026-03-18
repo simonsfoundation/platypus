@@ -7,12 +7,17 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QSettings>
 
+#ifndef PLATYPUS_APP_VERSION
+#define PLATYPUS_APP_VERSION "1.0"
+#endif
+
 extern bool s_debug_mode;
 
 int main(int argc, char *argv[])
 {
 	QCoreApplication::setApplicationName("Platypus");
-	QCoreApplication::setApplicationVersion("1.0");
+	QCoreApplication::setApplicationVersion(
+        QStringLiteral(PLATYPUS_APP_VERSION));
 	QCoreApplication::setOrganizationName("Digital Film Tools");
 	QCoreApplication::setOrganizationDomain("com.digitalfilmtools");
 	{

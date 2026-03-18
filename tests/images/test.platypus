@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<platypus>
+    <image>/Users/sbronder/opensource/platypus/tests/images/cradle.jpg</image>
+    <polygons>
+        <polygon type="input">
+            <values>
+                <black>0</black>
+                <gamma>0</gamma>
+                <white>255</white>
+            </values>
+            <points>
+                <point>0,383</point>
+                <point>1999,383</point>
+                <point>1999,461</point>
+                <point>0,461</point>
+            </points>
+        </polygon>
+        <polygon type="input">
+            <values>
+                <black>0</black>
+                <gamma>0</gamma>
+                <white>255</white>
+            </values>
+            <points>
+                <point>0,875</point>
+                <point>1999,875</point>
+                <point>1999,954</point>
+                <point>0,954</point>
+            </points>
+        </polygon>
+        <polygon type="input">
+            <values>
+                <black>0</black>
+                <gamma>0</gamma>
+                <white>255</white>
+            </values>
+            <points>
+                <point>0,1362</point>
+                <point>1999,1362</point>
+                <point>1999,1442</point>
+                <point>0,1442</point>
+            </points>
+        </polygon>
+        <polygon type="input">
+            <values>
+                <black>0</black>
+                <gamma>0</gamma>
+                <white>255</white>
+            </values>
+            <points>
+                <point>141,0</point>
+                <point>311,0</point>
+                <point>311,1567</point>
+                <point>141,1567</point>
+            </points>
+        </polygon>
+        <polygon type="input">
+            <values>
+                <black>0</black>
+                <gamma>0</gamma>
+                <white>255</white>
+            </values>
+            <points>
+                <point>445,0</point>
+                <point>709,0</point>
+                <point>709,1567</point>
+                <point>445,1567</point>
+            </points>
+        </polygon>
+        <polygon type="input">
+            <values>
+                <black>0</black>
+                <gamma>0</gamma>
+                <white>255</white>
+            </values>
+            <points>
+                <point>861,0</point>
+                <point>1023,0</point>
+                <point>1023,1567</point>
+                <point>861,1567</point>
+            </points>
+        </polygon>
+        <polygon type="input">
+            <values>
+                <black>0</black>
+                <gamma>0</gamma>
+                <white>255</white>
+            </values>
+            <points>
+                <point>1175,0</point>
+                <point>1337,0</point>
+                <point>1337,1567</point>
+                <point>1175,1567</point>
+            </points>
+        </polygon>
+        <polygon type="input">
+            <values>
+                <black>0</black>
+                <gamma>0</gamma>
+                <white>255</white>
+            </values>
+            <points>
+                <point>1485,0</point>
+                <point>1648,0</point>
+                <point>1648,1567</point>
+                <point>1485,1567</point>
+            </points>
+        </polygon>
+        <polygon type="input">
+            <values>
+                <black>0</black>
+                <gamma>0</gamma>
+                <white>255</white>
+            </values>
+            <points>
+                <point>1793,0</point>
+                <point>1957,0</point>
+                <point>1957,1567</point>
+                <point>1793,1567</point>
+            </points>
+        </polygon>
+    </polygons>
+</platypus>

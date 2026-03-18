@@ -19,6 +19,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(BUILD_PHOTOSHOP_PLUGIN "Build the Photoshop plugin" OFF)
 option(BUILD_APPLE_APP "Build the Apple App instead of an executable" OFF)
 option(OpenCV_DIR "Path to OpenCV if not found automatically" "")
+set(PLATYPUS_PACKAGE_VERSION_OVERRIDE "" CACHE STRING
+    "Override the version string used for packaged release artifacts")
+
+if (PLATYPUS_PACKAGE_VERSION_OVERRIDE)
+  set(PLATYPUS_PACKAGE_VERSION "${PLATYPUS_PACKAGE_VERSION_OVERRIDE}")
+else()
+  set(PLATYPUS_PACKAGE_VERSION "${PROJECT_VERSION}")
+endif()
 
 if (NOT WIN32)
   set(OpenCV_STATIC ON)
@@ -127,14 +135,19 @@ if (BUILD_APPLE_APP)
   set_target_properties(PlatypusGui PROPERTIES
     MACOSX_BUNDLE TRUE
     MACOSX_BUNDLE_BUNDLE_NAME "platypus"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "com.simonsfoundation.platypus"
+    MACOSX_BUNDLE_BUNDLE_VERSION "${PLATYPUS_PACKAGE_VERSION}"
+    MACOSX_BUNDLE_SHORT_VERSION_STRING "${PLATYPUS_PACKAGE_VERSION}"
     MACOSX_RPATH TRUE
-    MACOSX_FRAMEWORK_IDENTIFIER com.host.target
+    MACOSX_FRAMEWORK_IDENTIFIER "com.simonsfoundation.platypus"
     XCODE_ATTRIBUTE_LD_RUNPATH_SEARCH_PATHS "@loader_path/Libraries"
     XCODE_ATTRIBUTE_ENABLE_HARDENED_RUNTIME YES
     MACOSX_BUNDLE_ICON_FILE "${CMAKE_CURRENT_SOURCE_DIR}/mac/AppIcon.icns"
   )
 elseif(WIN32)
   add_executable(PlatypusGui WIN32 src/main.cpp)
+  target_sources(PlatypusGui PRIVATE
+      "${CMAKE_CURRENT_SOURCE_DIR}/platypus.rc")
 else()
   add_executable(PlatypusGui src/main.cpp)
 endif()
@@ -150,6 +163,16 @@ else()
 endif()
 
 target_link_libraries(PlatypusGui PRIVATE platypus_gui)
+target_compile_definitions(PlatypusGui PRIVATE
+    PLATYPUS_APP_VERSION="${PLATYPUS_PACKAGE_VERSION}")
+
+install(TARGETS PlatypusGui
+    BUNDLE DESTINATION .
+    RUNTIME DESTINATION .)
+
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/user_guide.pdf"
+    DESTINATION .)
 
 # Only find and link xcb on Linux
 if(UNIX AND NOT APPLE)
@@ -158,6 +181,43 @@ if(UNIX AND NOT APPLE)
 endif()
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/installer/payload/files/user_guide.pdf ${CMAKE_CURRENT_BINARY_DIR}/user_guide.pdf COPYONLY)
+
+if (WIN32 AND NOT BUILD_PHOTOSHOP_PLUGIN)
+  set(CPACK_GENERATOR "NSIS")
+  set(CPACK_MONOLITHIC_INSTALL ON)
+  set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
+  set(CPACK_PACKAGE_NAME "Platypus")
+  set(CPACK_PACKAGE_VENDOR "Simons Foundation")
+  set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
+      "Platypus cradle removal tool for X-ray images of paintings on panel")
+  set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/simonsfoundation/platypus")
+  set(CPACK_PACKAGE_INSTALL_DIRECTORY "Platypus")
+  set(CPACK_PACKAGE_EXECUTABLES "PlatypusGui" "Platypus")
+  set(CPACK_PACKAGE_FILE_NAME
+      "Platypus-${PLATYPUS_PACKAGE_VERSION}-windows-x64-setup")
+  set(CPACK_PACKAGE_ICON
+      "${CMAKE_CURRENT_SOURCE_DIR}/installer/payload/resources/icon.bmp")
+  set(CPACK_RESOURCE_FILE_LICENSE
+      "${CMAKE_CURRENT_SOURCE_DIR}/installer/payload/resources/license_agreement.txt")
+  set(CPACK_NSIS_INSTALL_ROOT "$LOCALAPPDATA\\Programs")
+  set(CPACK_NSIS_PACKAGE_NAME "Platypus")
+  set(CPACK_NSIS_DISPLAY_NAME "Platypus")
+  set(CPACK_NSIS_INSTALLED_ICON_NAME "PlatypusGui.exe")
+  set(CPACK_NSIS_EXECUTABLES_DIRECTORY ".")
+  set(CPACK_NSIS_MUI_ICON
+      "${CMAKE_CURRENT_SOURCE_DIR}/installer/payload/resources/icon.ico")
+  set(CPACK_NSIS_MUI_UNIICON
+      "${CMAKE_CURRENT_SOURCE_DIR}/installer/payload/resources/icon.ico")
+  set(CPACK_NSIS_MUI_FINISHPAGE_RUN "PlatypusGui.exe")
+  set(CPACK_NSIS_MENU_LINKS "user_guide.pdf" "Platypus User Guide")
+  set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+  set(CPACK_NSIS_MODIFY_PATH OFF)
+  set(CPACK_NSIS_HELP_LINK "https://github.com/simonsfoundation/platypus")
+  set(CPACK_NSIS_URL_INFO_ABOUT "https://github.com/simonsfoundation/platypus")
+  set(CPACK_NSIS_UNINSTALL_NAME "Uninstall Platypus")
+  set(CPACK_NSIS_BRANDING_TEXT "Platypus")
+  include(CPack)
+endif()
 
 if (BUILD_TESTING)
   include(FetchContent)

@@ -63,17 +63,28 @@ The configure script checks for missing system packages and tells you exactly wh
 
 #### Windows
 
-Requires [Git](https://git-scm.com/), [CMake](https://cmake.org/download/), and [Visual Studio 2022](https://visualstudio.microsoft.com/) (with C++ workload). Run from a **Developer Command Prompt**:
+Windows end users should download the signed installer `.exe` from GitHub Releases and install Platypus by double-clicking it. They should not need to install Qt, OpenCV, Visual Studio runtimes, or any other dependency manually.
+
+For local developer builds, use a **Developer Command Prompt** with [Git](https://git-scm.com/), [CMake](https://cmake.org/download/), and [Visual Studio 2022](https://visualstudio.microsoft.com/) (with the C++ workload):
 
 ```bat
 git clone https://github.com/simonsfoundation/platypus.git
 cd platypus
 configure.bat
-cmake --build build --target PlatypusGui
-build\PlatypusGui.exe
+cmake --build build --config Release --target PlatypusGui
+powershell -ExecutionPolicy Bypass -File scripts\windows_package.ps1 -BuildDir build -Configuration Release -PackageDir build\package
+```
+
+To sign a local installer with Microsoft Trusted Signing:
+
+```bat
+copy scripts\windows_sign_metadata.sample.json scripts\windows_sign_metadata.local.json
+powershell -ExecutionPolicy Bypass -File scripts\windows_package.ps1 -BuildDir build -Configuration Release -PackageDir build\package -Sign -SigningMetadataPath scripts\windows_sign_metadata.local.json
 ```
 
 > **Note:** If `configure.sh` or `configure.bat` falls back to vcpkg, the first build takes ~30-60 minutes while OpenCV and Qt6 are built from source. Subsequent fallback builds are faster because vcpkg caches compiled packages locally.
+>
+> The full Windows release workflow, including local signing and installer verification, is documented in `installer_guide/windows.md`.
 
 ### Manual Dependency Installation (Alternative)
 
