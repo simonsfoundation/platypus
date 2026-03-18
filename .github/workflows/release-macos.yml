@@ -26,32 +26,20 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Build, sign, notarize, and publish macOS release
-    runs-on: macos-latest
-    environment: release-macos
+  prepare:
+    name: Prepare release tag
+    runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
-      _VCPKG_: ${{ github.workspace }}/vcpkg
-      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg/bincache
-      VCPKG_BINARY_SOURCES: clear;x-gha,readwrite
-      VCPKG_GIT_COMMIT_ID: b2cb0da531c2f1f740045bfe7c4dac59f0b2b69c
-      APP_NAME: PlatypusGui
-      DMG_NAME: Platypus-macos-universal.dmg
+    outputs:
+      package_version: ${{ steps.package_version.outputs.value }}
 
     steps:
-      - uses: actions/github-script@v7
-        with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
-
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.target_ref }}
           fetch-depth: 0
-          submodules: true
 
       - name: Validate release tag
         shell: bash
@@ -62,6 +50,15 @@ jobs:
             echo "Release tag must look like v0.1.0 or v0.1.0-rc1" >&2
             exit 1
           fi
+
+      - name: Derive package version
+        id: package_version
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKAGE_VERSION="${{ github.event.inputs.tag }}"
+          PACKAGE_VERSION="${PACKAGE_VERSION#v}"
+          echo "value=${PACKAGE_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Check for existing release
         shell: bash
@@ -79,26 +76,74 @@ jobs:
           set -euo pipefail
           TAG="${{ github.event.inputs.tag }}"
           TARGET_REF="${{ github.event.inputs.target_ref }}"
+          git fetch --tags origin
           if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
             git tag "$TAG" "$TARGET_REF"
             git push origin "refs/tags/$TAG"
           fi
 
-      - name: Prepare vcpkg cache directory
-        shell: bash
-        run: mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+  build:
+    name: Build, sign, and notarize (${{ matrix.arch }})
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    environment: release-macos
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+            cmake_arch: arm64
+            dmg_name: Platypus-macos-arm64.dmg
+            checksum_name: Platypus-macos-arm64.sha256
+          - arch: x86_64
+            runner: macos-15-intel
+            cmake_arch: x86_64
+            dmg_name: Platypus-macos-x86_64.dmg
+            checksum_name: Platypus-macos-x86_64.sha256
 
-      - name: Get CMake
-        uses: lukka/get-cmake@latest
-
-      - name: Get Ninja
-        uses: seanmiddleditch/gha-setup-ninja@master
-
-      - name: Restore from cache and setup vcpkg
-        uses: lukka/run-vcpkg@v11
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
-          vcpkgJsonGlob: vcpkg.json
-          vcpkgGitCommitId: ${{ env.VCPKG_GIT_COMMIT_ID }}
+          ref: ${{ github.event.inputs.target_ref }}
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install ninja qt opencv
+          echo "$(brew --prefix qt)/bin" >> "$GITHUB_PATH"
+
+      - name: Configure CMake
+        shell: bash
+        run: |
+          set -euo pipefail
+          QT_PREFIX="$(brew --prefix qt)"
+          OPENCV_PREFIX="$(brew --prefix opencv)"
+          cmake -B build -S . -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_APPLE_APP=ON \
+            -DCMAKE_OSX_ARCHITECTURES="${{ matrix.cmake_arch }}" \
+            -DPLATYPUS_PACKAGE_VERSION_OVERRIDE="${{ needs.prepare.outputs.package_version }}" \
+            -DCMAKE_PREFIX_PATH="${QT_PREFIX};${OPENCV_PREFIX}" \
+            -DOpenCV_DIR="${OPENCV_PREFIX}/lib/cmake/opencv4"
+
+      - name: Build PlatypusGui
+        shell: bash
+        run: cmake --build build --config Release --target PlatypusGui
+
+      - name: Verify app architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_BIN="build/PlatypusGui.app/Contents/MacOS/PlatypusGui"
+          APP_ARCHS="$(lipo -archs "$APP_BIN")"
+          echo "App architectures: $APP_ARCHS"
+          [[ "$APP_ARCHS" == *"${{ matrix.cmake_arch }}"* ]] || {
+            echo "Missing expected architecture ${{ matrix.cmake_arch }}" >&2
+            exit 1
+          }
 
       - name: Import Apple signing certificate
         shell: bash
@@ -120,11 +165,7 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
           security default-keychain -d user -s "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          {
-            echo "KEYCHAIN_PATH=$KEYCHAIN_PATH"
-            echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD"
-          } >> "$GITHUB_ENV"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
       - name: Materialize App Store Connect API key
         shell: bash
@@ -136,52 +177,11 @@ jobs:
           echo "$APPSTORE_CONNECT_API_KEY_BASE64" | base64 --decode > "$API_KEY_PATH"
           echo "APPSTORE_CONNECT_API_KEY_PATH=$API_KEY_PATH" >> "$GITHUB_ENV"
 
-      - name: Configure CMake
-        shell: bash
-        run: |
-          set -euo pipefail
-          PACKAGE_VERSION="${{ github.event.inputs.tag }}"
-          PACKAGE_VERSION="${PACKAGE_VERSION#v}"
-          cmake -B build -S . -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_APPLE_APP=ON \
-            -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
-            -DVCPKG_OSX_ARCHITECTURES="x86_64;arm64" \
-            -DPLATYPUS_PACKAGE_VERSION_OVERRIDE="$PACKAGE_VERSION" \
-            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
-
-      - name: Build PlatypusGui
-        shell: bash
-        run: cmake --build build --config Release --target PlatypusGui
-
-      - name: Verify universal binary
-        shell: bash
-        run: |
-          set -euo pipefail
-          APP_BIN="build/PlatypusGui.app/Contents/MacOS/PlatypusGui"
-          APP_ARCHS="$(lipo -archs "$APP_BIN")"
-          echo "App architectures: $APP_ARCHS"
-          [[ "$APP_ARCHS" == *"x86_64"* ]] || { echo "Missing x86_64 slice" >&2; exit 1; }
-          [[ "$APP_ARCHS" == *"arm64"* ]] || { echo "Missing arm64 slice" >&2; exit 1; }
-
-      - name: Locate macdeployqt
-        shell: bash
-        run: |
-          set -euo pipefail
-          MACDEPLOYQT_BIN="$(find "$GITHUB_WORKSPACE/vcpkg_installed" -type f -name macdeployqt | head -n 1 || true)"
-          if [[ -z "$MACDEPLOYQT_BIN" ]]; then
-            MACDEPLOYQT_BIN="$(command -v macdeployqt || true)"
-          fi
-          if [[ -z "$MACDEPLOYQT_BIN" ]]; then
-            echo "Unable to locate macdeployqt" >&2
-            exit 1
-          fi
-          echo "MACDEPLOYQT_BIN=$MACDEPLOYQT_BIN" >> "$GITHUB_ENV"
-
       - name: Sign app bundle
         shell: bash
         run: |
           set -euo pipefail
+          MACDEPLOYQT_BIN="$(brew --prefix qt)/bin/macdeployqt"
           bash scripts/mac_sign_app.sh \
             --app build/PlatypusGui.app \
             --identity "${{ vars.APPLE_SIGNING_IDENTITY }}" \
@@ -191,7 +191,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          STAGING_DIR="$RUNNER_TEMP/dmg-root"
+          STAGING_DIR="$RUNNER_TEMP/dmg-root-${{ matrix.arch }}"
           rm -rf "$STAGING_DIR"
           mkdir -p "$STAGING_DIR"
           cp -R build/PlatypusGui.app "$STAGING_DIR/"
@@ -201,13 +201,13 @@ jobs:
             -srcfolder "$STAGING_DIR" \
             -ov \
             -format UDZO \
-            "build/$DMG_NAME"
+            "build/${{ matrix.dmg_name }}"
 
       - name: Notarize DMG
         shell: bash
         run: |
           set -euo pipefail
-          xcrun notarytool submit "build/$DMG_NAME" \
+          xcrun notarytool submit "build/${{ matrix.dmg_name }}" \
             --key "$APPSTORE_CONNECT_API_KEY_PATH" \
             --key-id "${{ secrets.APPSTORE_CONNECT_API_KEY_ID }}" \
             --issuer "${{ secrets.APPSTORE_CONNECT_API_ISSUER_ID }}" \
@@ -217,43 +217,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          xcrun stapler staple "build/$DMG_NAME"
-          spctl -a -t open --context context:primary-signature -v "build/$DMG_NAME"
+          xcrun stapler staple "build/${{ matrix.dmg_name }}"
+          spctl -a -t open --context context:primary-signature -v "build/${{ matrix.dmg_name }}"
 
-      - name: Generate checksums
+      - name: Generate checksum
         shell: bash
         run: |
           set -euo pipefail
-          (
-            cd build
-            shasum -a 256 "$DMG_NAME" > SHA256SUMS.txt
-          )
-
-      - name: Publish GitHub Release
-        shell: bash
-        run: |
-          set -euo pipefail
-          TAG="${{ github.event.inputs.tag }}"
-          RELEASE_ARGS=()
-          if [[ "${{ github.event.inputs.prerelease }}" == "true" ]]; then
-            RELEASE_ARGS+=(--prerelease)
-          fi
-          gh release create "$TAG" \
-            "build/$DMG_NAME" \
-            "build/SHA256SUMS.txt" \
-            --target "${{ github.event.inputs.target_ref }}" \
-            --title "$TAG" \
-            --generate-notes \
-            "${RELEASE_ARGS[@]}"
+          shasum -a 256 "build/${{ matrix.dmg_name }}" > "build/${{ matrix.checksum_name }}"
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-release-artifacts
+          name: macos-${{ matrix.arch }}-release
           path: |
-            build/PlatypusGui.app
-            build/${{ env.DMG_NAME }}
-            build/SHA256SUMS.txt
+            build/${{ matrix.dmg_name }}
+            build/${{ matrix.checksum_name }}
 
       - name: Cleanup temporary keychain
         if: always()
@@ -263,3 +242,39 @@ jobs:
           if [[ -n "${KEYCHAIN_PATH:-}" ]]; then
             security delete-keychain "$KEYCHAIN_PATH"
           fi
+
+  publish:
+    name: Publish GitHub Release
+    needs:
+      - prepare
+      - build
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Create GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag }}"
+          mapfile -t RELEASE_FILES < <(find dist -type f \( -name '*.dmg' -o -name '*.sha256' \) | sort)
+          if [[ "${#RELEASE_FILES[@]}" -eq 0 ]]; then
+            echo "No release artifacts were downloaded." >&2
+            exit 1
+          fi
+          RELEASE_ARGS=()
+          if [[ "${{ github.event.inputs.prerelease }}" == "true" ]]; then
+            RELEASE_ARGS+=(--prerelease)
+          fi
+          gh release create "$TAG" \
+            "${RELEASE_FILES[@]}" \
+            --target "${{ github.event.inputs.target_ref }}" \
+            --title "$TAG" \
+            --generate-notes \
+            "${RELEASE_ARGS[@]}"
