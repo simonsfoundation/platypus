@@ -144,11 +144,14 @@ if [[ "$VERIFY_ONLY" -eq 0 ]]; then
 
   while IFS= read -r -d '' framework; do
     sign_path "$framework"
-  done < <(find "$APP_PATH/Contents" -type d -name '*.framework' -print0 | sort -z)
+  done < <(find "$APP_PATH/Contents" -name '*.framework' -print0 | sort -z)
 
   while IFS= read -r -d '' bundle; do
     sign_path "$bundle"
-  done < <(find "$APP_PATH/Contents" \( -type d -name '*.app' -o -type d -name '*.bundle' -o -type d -name '*.plugin' -o -type d -name '*.xpc' \) -print0 | sort -z)
+  done < <(find "$APP_PATH/Contents" \( -name '*.app' -o -name '*.bundle' -o -name '*.plugin' -o -name '*.xpc' \) -print0 | sort -z)
+
+  echo "Verifying nested signatures before signing app bundle"
+  codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
   echo "Signing app bundle $APP_PATH"
   codesign --force --sign "$IDENTITY" --options runtime --timestamp "$APP_PATH"
