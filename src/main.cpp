@@ -16,7 +16,7 @@ int main(int argc, char *argv[])
 	QCoreApplication::setOrganizationName("Digital Film Tools");
 	QCoreApplication::setOrganizationDomain("com.digitalfilmtools");
 	{
-    #if defined(Q_OS_MACX)
+    #if defined(Q_OS_MACOS)
         QString pluginsPath = QFileInfo(argv[0]).path() + "/../Resources/plugins";
     #else
         QString pluginsPath = QFileInfo(argv[0]).path() + "/plugins";
@@ -25,7 +25,7 @@ int main(int argc, char *argv[])
 	}
 
 	QApplication a(argc, argv);
-    a.setAttribute(Qt::AA_UseHighDpiPixmaps);
+
 
     QSettings settings;
 	ImageManager imageManager;

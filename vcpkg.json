@@ -15,19 +15,14 @@
       ]
     },
     {
-      "name": "qt5",
+      "name": "qtbase",
       "features": [
-        "activeqt",
-        "declarative",
-        "imageformats",
-        "multimedia",
-        "quickcontrols",
-        "quickcontrols2",
-        "svg",
-        "tools",
-        "extras",
-        "tools"
+        "widgets",
+        "concurrent"
       ]
+    },
+    {
+      "name": "qtsvg"
     },
     {
       "name": "qttools"

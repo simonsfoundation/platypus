@@ -1,7 +1,8 @@
 #include <project.h>
 #include <polygon.h>
 #include <imageManager.h>
-#include <QtXml/QDomDocument>
+#include <QtCore/QXmlStreamReader>
+#include <QtCore/QXmlStreamWriter>
 #include <QtCore/QFile>
 #include <QtGui/QPainter>
 
@@ -47,142 +48,70 @@ void Project::clear()
 void Project::load(const QByteArray &data)
 {
     clear();
-	QDomDocument doc;
-	QString errorStr;
-	int errorLine;
-	int errorColumn;
-	if (doc.setContent(data, true, &errorStr, &errorLine, &errorColumn))
+	QXmlStreamReader reader(data);
+
+	// Find the root element
+	while (!reader.atEnd() && !reader.hasError())
 	{
-		QDomElement root = doc.documentElement();
-		QString tag = root.tagName();
-		if (root.tagName() == kRootName)
+		QXmlStreamReader::TokenType token = reader.readNext();
+		if (token == QXmlStreamReader::StartElement && reader.name() == QLatin1String(kRootName))
 		{
-			// polygons
-			QDomElement polygonsNode = root.firstChildElement("polygons");
-			QDomElement polygonNode = polygonsNode.firstChildElement("polygon");
-			while (!polygonNode.isNull())
+			// Read children of root
+			while (reader.readNextStartElement())
 			{
-				PolygonPointer poly(new Polygon);
-				poly->load(polygonNode);
-				addPolygon(poly);
-
-				polygonNode = polygonNode.nextSiblingElement("polygon");
+				if (reader.name() == QLatin1String("polygons"))
+				{
+					while (reader.readNextStartElement())
+					{
+						if (reader.name() == QLatin1String("polygon"))
+						{
+							PolygonPointer poly(new Polygon);
+							poly->load(reader);
+							addPolygon(poly);
+						}
+						else
+						{
+							reader.skipCurrentElement();
+						}
+					}
+				}
+				else
+				{
+					reader.skipCurrentElement();
+				}
 			}
-
-			#if 0
-
-            // segments
-			QDomElement segmentsNode = root.firstChildElement("segments");
-            if (segmentsNode.isElement())
-            {
-                // pieces
-                QDomElement pieceNode = segmentsNode.firstChildElement("piece");
-                while (!pieceNode.isNull())
-                {
-                    QString text = pieceNode.text();
-                    QStringList args = text.split(' ');
-                    if (args.size() == 3)
-                    {
-                        int type = args[0].toInt();
-                        int x = args[1].toInt();
-                        int y = args[2].toInt();
-
-                        m_ms.piece_type.push_back(type);
-                        m_ms.piece_middle.push_back(cv::Point2i(x, y));
-                    }
-
-                    pieceNode = pieceNode.nextSiblingElement();
-                }
-
-                // mask
-                QDomElement maskNode = segmentsNode.firstChildElement("mask");
-                if (!maskNode.isNull())
-                {
-                    const cvImageRef &mask = ImageManager::get().removeMask();
-
-                    m_ms.piece_mask = cv::Mat(mask->height, mask->width, CV_16U, cv::Scalar(0));
-
-                    QString text = maskNode.text();
-                    QByteArray data = QByteArray::fromBase64(text.toLatin1());
-                    data = qUncompress(data);
-                    if (mask->imageSize == data.size())
-                        std::memcpy(m_ms.piece_mask.data, data.constData(), data.size());
-                }
-            }
-			#endif
 		}
 	}
-	else
+
+	if (reader.hasError())
 	{
-		throw errorStr;
+		throw reader.errorString();
 	}
 }
 
 QByteArray Project::save() const
 {
-	QDomDocument doc("platpypus");
-	QDomElement root = doc.createElement(kRootName);
-	doc.appendChild(root);
+	QByteArray data;
+	QXmlStreamWriter writer(&data);
+	writer.setAutoFormatting(true);
+	writer.writeStartDocument();
+	writer.writeStartElement(kRootName);
 
 	// image path
-	{
-		QDomElement elem = doc.createElement("image");
-		root.appendChild(elem);
-		elem.appendChild(doc.createTextNode(m_imagePath));
-	}
+	writer.writeTextElement("image", m_imagePath);
 
 	// polygons
-    int outputCount = 0;
+	writer.writeStartElement("polygons");
+	for (const auto &poly : m_polygons)
 	{
-		QDomElement polygons = doc.createElement("polygons");
-		root.appendChild(polygons);
-		for (auto poly : m_polygons)
-        {
-			poly->save(polygons);
-            if (poly->type() == Polygon::OUTPUT)
-                outputCount++;
-        }
+		poly->save(writer);
 	}
+	writer.writeEndElement(); // polygons
 
-    // marked segments
-    if (m_ms.pieces != 0 && 0)
-    {
-		QDomElement segments = doc.createElement("segments");
-		root.appendChild(segments);
+	writer.writeEndElement(); // platypus
+	writer.writeEndDocument();
 
-        for (int i = 0; i < m_ms.pieces; i++)
-        {
-            QDomElement piece = doc.createElement("piece");
-            segments.appendChild(piece);
-            int type = m_ms.piece_type[i];
-            const cv::Point2i &pt = m_ms.piece_middle[i];
-            piece.appendChild(doc.createTextNode(QString("%1,%2,%3").arg(type).arg(pt.x).arg(pt.y)));
-        }
-
-        const cv::Mat& mask = m_ms.piece_mask;
-        QByteArray sourceData(reinterpret_cast<const char*>(mask.data), mask.size[0] * mask.size[1] * sizeof(short));
-        QByteArray compressed = qCompress(sourceData);
-        compressed = compressed.toBase64();
-        QDomElement maskElement = doc.createElement("mask");
-        segments.appendChild(maskElement);
-        maskElement.appendChild(doc.createTextNode(compressed));
-    }
-
-    // mask
-    #if 0
-    if (outputCount != 0)
-    {
-        cvImageRef mask = ImageManager::get().removeMask();
-        QByteArray sourceData(mask->imageData, mask->imageSize);
-        QByteArray compressed = qCompress(sourceData);
-        compressed = compressed.toBase64();
-        QDomElement maskElement = doc.createElement("mask");
-        root.appendChild(maskElement);
-        maskElement.appendChild(doc.createTextNode(compressed));
-    }
-    #endif
-
-	return doc.toByteArray();
+	return data;
 }
 
 void Project::load(const QString &path)
@@ -222,18 +151,18 @@ void Project::save(const QString &path) const
 void Project::addPolygon(const PolygonPointer &p)
 {
 	m_polygons << p;
-	connect(p.data(), SIGNAL(changed()), this, SLOT(onPolygonChanged()));
-	connect(p.data(), SIGNAL(valueChanged(const QString &)), this, SLOT(onPolygonValueChanged(const QString &)));
-	connect(p.data(), SIGNAL(selectionChanged()), this, SLOT(onSelectionChanged()));
+	connect(p.data(), &Polygon::changed, this, &Project::onPolygonChanged);
+	connect(p.data(), &Polygon::valueChanged, this, &Project::onPolygonValueChanged);
+	connect(p.data(), &Polygon::selectionChanged, this, &Project::onSelectionChanged);
 	emit changed();
 	emit polygonAdded(p.data());
 }
 
 void Project::removePolygon(const PolygonPointer &p)
 {
-	p->disconnect(SIGNAL(changed()), this, SLOT(onPolygonChanged()));
-	p->disconnect(SIGNAL(valueChanged(const QString &)), this, SLOT(onPolygonValueChanged(const QString &)));
-	p->disconnect(SIGNAL(selectionChanged()), this, SLOT(onSelectionChanged()));
+	disconnect(p.data(), &Polygon::changed, this, &Project::onPolygonChanged);
+	disconnect(p.data(), &Polygon::valueChanged, this, &Project::onPolygonValueChanged);
+	disconnect(p.data(), &Polygon::selectionChanged, this, &Project::onSelectionChanged);
 	m_polygons.removeAll(p);
 	emit changed();
 	emit polygonRemoved(p.data());

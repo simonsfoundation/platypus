@@ -377,6 +377,11 @@ void EditManipulator::mouseMoveEvent(Viewer *viewer, QMouseEvent *event)
 
     switch (m_mode)
     {
+        case kMode_None:
+        case kMode_Resize:
+        {
+            break;
+        }
         case kMode_Select:
         {
             doSelect(viewer, event);
@@ -447,6 +452,10 @@ void EditManipulator::mouseReleaseEvent(Viewer *viewer, QMouseEvent *event)
 			}
 			break;
 		}
+        case kMode_Resize:
+        {
+            break;
+        }
         case kMode_Select:
         {
             endSelect(viewer, event);
@@ -530,7 +539,10 @@ void EditManipulator::keyPressEvent(Viewer *viewer, QKeyEvent *event)
 {
     if (event->key() == Qt::Key_Alt || event->key() == Qt::Key_Shift)
     {
-        QMouseEvent mouseEvent(QEvent::MouseMove, s_mousePos, Qt::NoButton, 0, Qt::AltModifier);
+        const QPointF localPos(s_mousePos);
+        const QPointF globalPos(viewer->mapToGlobal(s_mousePos));
+        QMouseEvent mouseEvent(QEvent::MouseMove, localPos, localPos, globalPos,
+                               Qt::NoButton, Qt::NoButton, event->modifiers());
         mouseHoverEvent(viewer, &mouseEvent);
     }
 	if (!event->isAccepted())
@@ -541,7 +553,10 @@ void EditManipulator::keyReleaseEvent(Viewer *viewer, QKeyEvent *event)
 {
     if (event->key() == Qt::Key_Alt || event->key() == Qt::Key_Shift)
     {
-        QMouseEvent mouseEvent(QEvent::MouseMove, s_mousePos, Qt::NoButton, 0, 0);
+        const QPointF localPos(s_mousePos);
+        const QPointF globalPos(viewer->mapToGlobal(s_mousePos));
+        QMouseEvent mouseEvent(QEvent::MouseMove, localPos, localPos, globalPos,
+                               Qt::NoButton, Qt::NoButton, event->modifiers());
         mouseHoverEvent(viewer, &mouseEvent);
     }
     Manipulator::keyReleaseEvent(viewer, event);

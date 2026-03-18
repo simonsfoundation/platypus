@@ -39,8 +39,8 @@ public:
 
 	typedef QVector<Point> PointList;
 
-	void load(const class QDomElement &element);
-	void save(class QDomElement &parent) const;
+	void load(class QXmlStreamReader &reader);
+	void save(class QXmlStreamWriter &writer) const;
 
 	void set(const QString &key, const QVariant &value);
 	QVariant get(const QString &key) const;

@@ -1,5 +1,6 @@
 #include <mask.h>
-#include <QtXml/QDomDocument>
+#include <QtCore/QXmlStreamReader>
+#include <QtCore/QXmlStreamWriter>
 #include <QtGui/QImage>
 #include <QtGui/QPainter>
 
@@ -17,38 +18,52 @@ void Mask::clear()
 	emit changed();
 }
 
-void Mask::load(const QDomElement &root)
+void Mask::load(QXmlStreamReader &reader)
 {
-	QDomElement shapesNode = root.firstChildElement("shapes");
-	QDomElement shapeNode = shapesNode.firstChildElement("shape");
-	while (!shapeNode.isNull())
+	// reader is positioned at the <mask> or parent element containing <shapes>
+	while (reader.readNextStartElement())
 	{
-		MaskShapePointer shape(new MaskShape);
-		shape->load(shapeNode);
-		addShape(shape);
-
-		shapeNode  = shapeNode.nextSiblingElement("shape");
+		if (reader.name() == QLatin1String("shapes"))
+		{
+			while (reader.readNextStartElement())
+			{
+				if (reader.name() == QLatin1String("shape"))
+				{
+					MaskShapePointer shape(new MaskShape);
+					shape->load(reader);
+					addShape(shape);
+				}
+				else
+				{
+					reader.skipCurrentElement();
+				}
+			}
+		}
+		else
+		{
+			reader.skipCurrentElement();
+		}
 	}
 }
 
-void Mask::save(QDomElement &parent) const
+void Mask::save(QXmlStreamWriter &writer) const
 {
-	QDomElement shapes = parent.ownerDocument().createElement("shapes");
-	parent.appendChild(shapes);
-	for (auto shape : m_shapes)
-		shape->save(shapes);
+	writer.writeStartElement("shapes");
+	for (const auto &shape : m_shapes)
+		shape->save(writer);
+	writer.writeEndElement(); // shapes
 }
 
 void Mask::addShape(const MaskShapePointer &mask)
 {
 	m_shapes << mask;
-	connect(mask.data(), SIGNAL(changed()), SIGNAL(changed()));
+	connect(mask.data(), &MaskShape::changed, this, &Mask::changed);
 	emit changed();
 }
 
 void Mask::removeShape(const MaskShapePointer &mask)
 {
-	mask->disconnect(SIGNAL(changed()), this, SIGNAL(changed()));
+	disconnect(mask.data(), &MaskShape::changed, this, &Mask::changed);
 	m_shapes.removeAll(mask);
 	emit changed();
 }

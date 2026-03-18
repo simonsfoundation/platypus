@@ -32,3 +32,9 @@
 *.app
 
 build/**/*
+
+# vcpkg (cloned by configure.sh/configure.bat)
+vcpkg/
+.claude/
+.codex/
+*.log

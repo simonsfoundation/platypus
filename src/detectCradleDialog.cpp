@@ -28,7 +28,7 @@ DetectCradleDialog::DetectCradleDialog(QWidget *parent) : QDialog(parent)
     m_group = new QButtonGroup(this);
     m_group->addButton(autoDetect, 0);
     m_group->addButton(assistedDetect, 1);
-    connect(m_group, SIGNAL(buttonClicked(int)), SLOT(onMode(int)));
+    connect(m_group, &QButtonGroup::idClicked, this, &DetectCradleDialog::onMode);
 
     QLabel *hLabel = new QLabel(tr("Horizontal Members"));
     QLabel *vLabel = new QLabel(tr("Vertical Members"));
@@ -39,7 +39,7 @@ DetectCradleDialog::DetectCradleDialog(QWidget *parent) : QDialog(parent)
     m_v->setRange(1, 50);
 
     QGridLayout *grid = new QGridLayout;
-    grid->setMargin(0);
+    grid->setContentsMargins(0, 0, 0, 0);
     grid->setSpacing(4);
     grid->addWidget(hLabel, 0, 0);
     grid->addWidget(m_h, 0, 1);
@@ -51,8 +51,8 @@ DetectCradleDialog::DetectCradleDialog(QWidget *parent) : QDialog(parent)
 
     QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     layout->addWidget(buttons);
-    connect(buttons, SIGNAL(accepted()), SLOT(accept()));
-    connect(buttons, SIGNAL(rejected()), SLOT(reject()));
+    connect(buttons, &QDialogButtonBox::accepted, this, &DetectCradleDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, this, &DetectCradleDialog::reject);
     buttons->button(QDialogButtonBox::Ok)->setText(tr("Detect"));
 
     QSettings settings;

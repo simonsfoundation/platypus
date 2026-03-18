@@ -11,10 +11,10 @@ ViewerScroller::ViewerScroller(Viewer *viewer) : m_viewer(viewer)
 	m_hScroll = new QScrollBar(Qt::Horizontal, this);
 	m_vScroll = new QScrollBar(Qt::Vertical, this);
 
-	connect(m_hScroll, SIGNAL(valueChanged(int)), SLOT(onSlider(int)));
-	connect(m_vScroll, SIGNAL(valueChanged(int)), SLOT(onSlider(int)));
+	connect(m_hScroll, &QScrollBar::valueChanged, this, &ViewerScroller::onSlider);
+	connect(m_vScroll, &QScrollBar::valueChanged, this, &ViewerScroller::onSlider);
 
-	connect(m_viewer, SIGNAL(viewChanged()), SLOT(updateScrollBars()));
+	connect(m_viewer, &Viewer::viewChanged, this, &ViewerScroller::updateScrollBars);
 }
 
 ViewerScroller::~ViewerScroller(void)

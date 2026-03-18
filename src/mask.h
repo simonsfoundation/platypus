@@ -16,8 +16,8 @@ public:
 
   typedef QList<MaskShapePointer> ShapeList;
   ShapeList m_shapes;
-	void load(const class QDomElement &element);
-	void save(class QDomElement &parent) const;
+	void load(class QXmlStreamReader &reader);
+	void save(class QXmlStreamWriter &writer) const;
 
 	void addShape(const MaskShapePointer &mask);
 	void removeShape(const MaskShapePointer &mask);

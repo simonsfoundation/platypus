@@ -17,9 +17,9 @@ static QPoint s_lastPos;
 
 Viewer::Viewer(QWidget *parent) : ImageViewer(parent)
 {
-	connect(&ImageManager::get(), SIGNAL(imageChanged()), SLOT(onImageChanged()));
-	connect(Project::activeProject(), SIGNAL(changed()), SLOT(update()));
-	connect(Project::activeProject(), SIGNAL(selectionChanged()), SLOT(update()));
+	connect(&ImageManager::get(), &ImageManager::imageChanged, this, &Viewer::onImageChanged);
+	connect(Project::activeProject(), &Project::changed, this, qOverload<>(&Viewer::update));
+	connect(Project::activeProject(), &Project::selectionChanged, this, qOverload<>(&Viewer::update));
 
     m_manipulator = nullptr;
 	m_overlay = true;
@@ -93,7 +93,7 @@ void Viewer::updateZoomRange()
 	}
 }
 
-void Viewer::enterEvent(QEvent *event)
+void Viewer::enterEvent(QEnterEvent *event)
 {
 	ImageViewer::enterEvent(event);
 }

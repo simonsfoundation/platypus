@@ -68,8 +68,8 @@ public:
 
 	virtual Polygon *clone() const;
 
-	void load(const class QDomElement &element);
-	void save(class QDomElement &parent) const;
+	void load(class QXmlStreamReader &reader);
+	void save(class QXmlStreamWriter &writer) const;
 
     QPainterPath path(const QSize &size = QSize()) const;
 	bool isSelected() const;

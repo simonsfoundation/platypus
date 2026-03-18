@@ -11,45 +11,95 @@ The Platypus cradle removal algorithm was originally developed by Ph.D. student 
 
 As of December 2024, the Flatiron Institute is taking over maintanence of the code for Platypus. The applet currently works on mac and linux. The photoshop plugin is in progress.
 
-## Install From Source
+## Building from Source
 
-The main dependencies for Platypus are
+### Prerequisites
 
-1. opencv
-2. QT version 5
-3. cmake
-4. A modern c++ compiler
+You need the following installed before building:
 
-This is still a work in progress.
+- **git**
+- **cmake** (3.16+)
+- **ninja**
+- A C++17 compiler (Xcode CLI tools on macOS, GCC on Linux, Visual Studio 2022 on Windows)
 
-### Mac
+### Quick Start (Recommended)
+
+The provided configure scripts prefer preinstalled OpenCV and Qt6 when available. If they are not found, the scripts fall back to downloading and building the dependencies via [vcpkg](https://vcpkg.io/).
+
+#### macOS
 
 ```bash
-brew install opencv qt@5 cmake
-# make sure qt5 is on the path
-export PATH="/opt/homebrew/opt/qt@5/bin:$PATH"
-# Run build
-cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
-cmake --build build --config Release --target PlatypusGui
-# Launch the App
+git clone https://github.com/simonsfoundation/platypus.git
+cd platypus
+./configure.sh
+cmake --build build --target PlatypusGui
 ./build/PlatypusGui
 ```
 
-### Windows
+The script will install `ninja` via Homebrew if it is not already present.
 
-TBD. See the windows github actions [here](https://github.com/simonsfoundation/platypus/blob/main/.github/workflows/build-and-release-windows.yml) for dependencies and build flags
+#### Linux (Ubuntu/Debian)
 
-### Linux
+Install the required system packages first (vcpkg needs X11/xcb headers to build Qt6's platform plugin):
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y libopencv-dev
-# if this line does not work then you will need to download and install qt5 manually
-# See here https://wiki.qt.io/Install_Qt_5_on_Ubuntu
-sudo apt-get install -y qtbase5-dev qt5-qmake cmake
-# Run build
-cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j4 --config Release --target PlatypusGui
-# Launch the App
+sudo apt-get install -y pkg-config linux-libc-dev libx11-dev libxext-dev \
+  libxrender-dev libxcb1-dev libx11-xcb-dev libxcb-glx0-dev \
+  libxkbcommon-dev libxkbcommon-x11-dev libgl1-mesa-dev \
+  curl zip unzip tar ninja-build cmake git
+```
+
+Then build:
+
+```bash
+git clone https://github.com/simonsfoundation/platypus.git
+cd platypus
+./configure.sh
+cmake --build build --target PlatypusGui
 ./build/PlatypusGui
 ```
+
+The configure script checks for missing system packages and tells you exactly what to install if anything is missing.
+
+#### Windows
+
+Requires [Git](https://git-scm.com/), [CMake](https://cmake.org/download/), and [Visual Studio 2022](https://visualstudio.microsoft.com/) (with C++ workload). Run from a **Developer Command Prompt**:
+
+```bat
+git clone https://github.com/simonsfoundation/platypus.git
+cd platypus
+configure.bat
+cmake --build build --target PlatypusGui
+build\PlatypusGui.exe
+```
+
+> **Note:** If `configure.sh` or `configure.bat` falls back to vcpkg, the first build takes ~30-60 minutes while OpenCV and Qt6 are built from source. Subsequent fallback builds are faster because vcpkg caches compiled packages locally.
+
+### Manual Dependency Installation (Alternative)
+
+If you prefer to install dependencies yourself rather than using the configure scripts:
+
+#### macOS (Homebrew)
+
+```bash
+brew install opencv qt cmake ninja
+cmake -B build -S . -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_OSX_ARCHITECTURES="$(uname -m)" \
+  -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
+cmake --build build --target PlatypusGui
+```
+
+#### Linux (apt)
+
+```bash
+sudo apt-get install -y libopencv-dev qt6-base-dev cmake ninja-build
+cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target PlatypusGui
+```
+
+If `qt6-base-dev` is not available on your distribution, install the equivalent Qt6 development packages for your distro and point CMake at Qt6 with `-DCMAKE_PREFIX_PATH=/path/to/Qt6`.
+
+#### Windows (vcpkg)
+
+See the Windows GitHub Actions [workflow](https://github.com/simonsfoundation/platypus/blob/main/.github/workflows/build-and-release-windows.yml) for the full set of dependencies and build flags used in CI.

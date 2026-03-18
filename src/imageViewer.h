@@ -10,7 +10,7 @@ class ImageViewer : public QWidget
 	Q_OBJECT
 
 public:
-	ImageViewer(QWidget *parent = NULL);
+	ImageViewer(QWidget *parent = nullptr);
 
 	const ImageSource *getSource() const;
 

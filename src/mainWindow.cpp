@@ -27,7 +27,7 @@
 #include <QtWidgets/QBoxLayout>
 #include <QtWidgets/QProgressBar>
 #include <QtWidgets/QLabel>
-#include <QtWidgets/QShortcut>
+#include <QShortcut>
 #include <QtWidgets/QBoxLayout>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
@@ -43,22 +43,23 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
 	m_clipboard(new Clipboard(this)),
 	m_pluginMode(false)
 {
-	connect(&ImageManager::get(), SIGNAL(imageChanged()), SLOT(onImageChanged()));
-	connect(&ImageManager::get(), SIGNAL(status(const QString &)), statusBar(), SLOT(showMessage(const QString &)));
-	connect(m_undoMgr, SIGNAL(canRedoChanged(bool)), SLOT(onUndoRedoChanged(bool)));
-	connect(m_undoMgr, SIGNAL(canUndoChanged(bool)), SLOT(onUndoRedoChanged(bool)));
-	connect(m_undoMgr, SIGNAL(redoTextChanged(const QString &)), SLOT(onUndoRedoText(const QString &)));
-	connect(m_undoMgr, SIGNAL(undoTextChanged(const QString &)), SLOT(onUndoRedoText(const QString &)));
-	connect(m_clipboard, SIGNAL(changed()), SLOT(updateMenus()));
+	connect(&ImageManager::get(), &ImageManager::imageChanged, this, &MainWindow::onImageChanged);
+	connect(&ImageManager::get(), &ImageManager::status, this,
+            [this](const QString &msg) { statusBar()->showMessage(msg); });
+	connect(m_undoMgr, &UndoManager::canRedoChanged, this, &MainWindow::onUndoRedoChanged);
+	connect(m_undoMgr, &UndoManager::canUndoChanged, this, &MainWindow::onUndoRedoChanged);
+	connect(m_undoMgr, &UndoManager::redoTextChanged, this, &MainWindow::onUndoRedoText);
+	connect(m_undoMgr, &UndoManager::undoTextChanged, this, &MainWindow::onUndoRedoText);
+	connect(m_clipboard, &Clipboard::changed, this, &MainWindow::updateMenus);
 
-	connect(Project::activeProject(), SIGNAL(selectionChanged()), SLOT(onSelection()));
-	connect(Project::activeProject(), SIGNAL(polygonAdded(Polygon *)), SLOT(onPolygonAdded(Polygon *)));
-	connect(Project::activeProject(), SIGNAL(polygonRemoved(Polygon *)), SLOT(onPolygonRemoved(Polygon *)));
-	connect(Project::activeProject(), SIGNAL(polygonValueChanged(Polygon *, const QString &)), SLOT(onPolygonValueChanged(Polygon *, const QString &)));
+	connect(Project::activeProject(), &Project::selectionChanged, this, &MainWindow::onSelection);
+	connect(Project::activeProject(), &Project::polygonAdded, this, &MainWindow::onPolygonAdded);
+	connect(Project::activeProject(), &Project::polygonRemoved, this, &MainWindow::onPolygonRemoved);
+	connect(Project::activeProject(), &Project::polygonValueChanged, this, &MainWindow::onPolygonValueChanged);
 
 	m_viewer = new Viewer;
 
-	connect(m_viewer, SIGNAL(toolChanged()), SLOT(onToolChanged()));
+	connect(m_viewer, &Viewer::toolChanged, this, &MainWindow::onToolChanged);
 
 	m_scroller = new ViewerScroller(m_viewer);
 
@@ -67,36 +68,44 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
     m_viewerTools->setObjectName("viewerTools");
     m_viewerTools->setIconSize(QSize(24, 24));
     {
-        m_doneAction = m_viewerTools->addAction(QIcon(":images/done.png"), tr("Done"), this, SLOT(onDone()));
-        m_cancelAction = m_viewerTools->addAction(QIcon(":images/cancel.png"), tr("Cancel"), this, SLOT(onCancel()));
+        m_doneAction = m_viewerTools->addAction(QIcon(":images/done.png"), tr("Done"));
+        connect(m_doneAction, &QAction::triggered, this, &MainWindow::onDone);
+        m_cancelAction = m_viewerTools->addAction(QIcon(":images/cancel.png"), tr("Cancel"));
+        connect(m_cancelAction, &QAction::triggered, this, &MainWindow::onCancel);
 
         m_viewerTools->addSeparator();
 
-        QAction *reset = m_viewerTools->addAction(QIcon(":images/reset.png"), tr("Reset"), this, SLOT(onReset()));
+        QAction *reset = m_viewerTools->addAction(QIcon(":images/reset.png"), tr("Reset"));
+        connect(reset, &QAction::triggered, this, &MainWindow::onReset);
         reset->setToolTip(tr("Reset All"));
 
         m_viewerTools->addSeparator();
 
-        QAction *zoom100 = m_viewerTools->addAction(QIcon(":images/1to1.png"), tr("Zoom 100%"), m_viewer, SLOT(zoom100()));
+        QAction *zoom100 = m_viewerTools->addAction(QIcon(":images/1to1.png"), tr("Zoom 100%"));
+        connect(zoom100, &QAction::triggered, m_viewer, &Viewer::zoom100);
         zoom100->setToolTip(tr("Zoom 1:1 (h)"));
 
-        QAction *zoomFit = m_viewerTools->addAction(QIcon(":images/fitImage.png"), tr("Zoom to Fit"), m_viewer, SLOT(zoomToFit()));
+        QAction *zoomFit = m_viewerTools->addAction(QIcon(":images/fitImage.png"), tr("Zoom to Fit"));
+        connect(zoomFit, &QAction::triggered, m_viewer, &Viewer::zoomToFit);
         zoomFit->setToolTip(tr("Zoom to Fit (f)"));
 
-        QAction *zoomIn = m_viewerTools->addAction(QIcon(":images/zoomIn.png"), tr("Zoom In"), m_viewer, SLOT(zoomIn()));
+        QAction *zoomIn = m_viewerTools->addAction(QIcon(":images/zoomIn.png"), tr("Zoom In"));
+        connect(zoomIn, &QAction::triggered, m_viewer, &Viewer::zoomIn);
         zoomIn->setToolTip(tr("Zoom In (i)"));
 
-        QAction *zoomOut = m_viewerTools->addAction(QIcon(":images/zoomOut.png"), tr("Zoom Out"), m_viewer, SLOT(zoomOut()));
+        QAction *zoomOut = m_viewerTools->addAction(QIcon(":images/zoomOut.png"), tr("Zoom Out"));
+        connect(zoomOut, &QAction::triggered, m_viewer, &Viewer::zoomOut);
         zoomOut->setToolTip(tr("Zoom Out (o)"));
 
-        #if defined(Q_OS_MACX)
+        #if defined(Q_OS_MACOS)
             zoom100->setShortcut(QKeySequence("h"));
             zoomFit->setShortcut(QKeySequence("f"));
             zoomIn->setShortcut(QKeySequence("i"));
             zoomOut->setShortcut(QKeySequence("o"));
         #endif
 
-        m_overlay = m_viewerTools->addAction(QIcon(":images/overlay.png"), tr("Show Overlay"), this, SLOT(onToggleOverlay()));
+        m_overlay = m_viewerTools->addAction(QIcon(":images/overlay.png"), tr("Show Overlay"));
+        connect(m_overlay, &QAction::triggered, this, &MainWindow::onToggleOverlay);
         m_overlay->setToolTip(tr("Toggle Overlay (q)"));
         m_overlay->setCheckable(true);
         m_overlay->setChecked(m_viewer->overlayEnabled());
@@ -109,7 +118,8 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
     m_tools->setIconSize(QSize(24, 24));
 
 	// EDIT
-	m_polygon = m_tools->addAction(QIcon(":images/polygon.png"), tr("Polygons"), this, SLOT(onTool()));
+	m_polygon = m_tools->addAction(QIcon(":images/polygon.png"), tr("Polygons"));
+	connect(m_polygon, &QAction::triggered, this, &MainWindow::onTool);
 	m_polygon->setToolTip(tr("Polygons (e)"));
 	m_polygon->setShortcut(QKeySequence("e"));
 	m_polygon->setCheckable(true);
@@ -117,7 +127,8 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
     m_polygon->setStatusTip(tr("Edit cradle polygons"));
 
 	// MASK
-	m_mask = m_tools->addAction(QIcon(":images/mask.png"), tr("Mask"), this, SLOT(onTool()));
+	m_mask = m_tools->addAction(QIcon(":images/mask.png"), tr("Mask"));
+	connect(m_mask, &QAction::triggered, this, &MainWindow::onTool);
 	m_mask->setToolTip(tr("Mask (m)"));
 	m_mask->setShortcut(QKeySequence("m"));
 	m_mask->setCheckable(true);
@@ -130,7 +141,8 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
 	m_tools->addSeparator();
 
 	// INVERT
-	m_invert = m_tools->addAction(QIcon(":images/invert.png"), tr("Invert"), this, SLOT(onCommand()));
+	m_invert = m_tools->addAction(QIcon(":images/invert.png"), tr("Invert"));
+	connect(m_invert, &QAction::triggered, this, &MainWindow::onCommand);
 	m_invert->setToolTip(tr("Invert Mask (Ctrl+i)"));
 	m_invert->setShortcut(QKeySequence("Ctrl+i"));
 	m_invert->setData("invertMask");
@@ -138,17 +150,21 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
     m_commands << m_invert;
 
     // DETECT CRADLE
-	m_detectCradle = m_tools->addAction(QIcon(":images/detectCradle.png"), tr("Detect Cradle"), this, SLOT(onDetectCradle()));
+	m_detectCradle = m_tools->addAction(QIcon(":images/detectCradle.png"), tr("Detect Cradle"));
+	connect(m_detectCradle, &QAction::triggered, this, &MainWindow::onDetectCradle);
     m_detectCradle->setStatusTip(tr("Detect cradle"));
 
-	m_removeCradle = m_tools->addAction(QIcon(":images/removeCradle.png"), tr("Remove Cradle"), this, SLOT(onRemoveCradle()));
+	m_removeCradle = m_tools->addAction(QIcon(":images/removeCradle.png"), tr("Remove Cradle"));
+	connect(m_removeCradle, &QAction::triggered, this, &MainWindow::onRemoveCradle);
     m_removeCradle->setStatusTip(tr("Remove cradle"));
 
-	m_removeTexture = m_tools->addAction(tr("Remove Texture"), this, SLOT(onRemoveTexture()));
+	m_removeTexture = m_tools->addAction(tr("Remove Texture"));
+	connect(m_removeTexture, &QAction::triggered, this, &MainWindow::onRemoveTexture);
     m_removeTexture->setStatusTip(tr("Remove texture"));
 
 	// REMOVAL TOOLS
-	m_showResult = m_tools->addAction(tr("Show Result"), this, SLOT(onToggleResult()));
+	m_showResult = m_tools->addAction(tr("Show Result"));
+	connect(m_showResult, &QAction::triggered, this, &MainWindow::onToggleResult);
 	m_showResult->setToolTip(tr("Toggle Result (r)"));
 	m_showResult->setCheckable(true);
 	m_showResult->setChecked(true);
@@ -163,31 +179,31 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
 
 		QWidget *sliders = new QWidget;
 		QHBoxLayout *layout = new QHBoxLayout(sliders);
-		layout->setMargin(0);
+		layout->setContentsMargins(0, 0, 0, 0);
 
         m_black = new Slider;
         m_black->setObjectName("black");
         m_black->setLabel(tr("Black"));
         m_black->setRange(0, 255);
-        connect(m_black, SIGNAL(sliderPressed()), SLOT(onBeginChange()));
-        connect(m_black, SIGNAL(sliderReleased()), SLOT(onEndChange()));
-        connect(m_black, SIGNAL(valueChanged(int)), SLOT(onSlider(int)));
+        connect(m_black, &Slider::sliderPressed, this, &MainWindow::onBeginChange);
+        connect(m_black, &Slider::sliderReleased, this, &MainWindow::onEndChange);
+        connect(m_black, &Slider::valueChanged, this, &MainWindow::onSlider);
 
         m_gamma = new Slider;
         m_gamma->setObjectName("gamma");
         m_gamma->setLabel(tr("Gamma"));
         m_gamma->setRange(-100, 100);
-        connect(m_gamma, SIGNAL(sliderPressed()), SLOT(onBeginChange()));
-        connect(m_gamma, SIGNAL(sliderReleased()), SLOT(onEndChange()));
-        connect(m_gamma, SIGNAL(valueChanged(int)), SLOT(onSlider(int)));
+        connect(m_gamma, &Slider::sliderPressed, this, &MainWindow::onBeginChange);
+        connect(m_gamma, &Slider::sliderReleased, this, &MainWindow::onEndChange);
+        connect(m_gamma, &Slider::valueChanged, this, &MainWindow::onSlider);
 
         m_white = new Slider;
         m_white->setObjectName("white");
         m_white->setLabel(tr("White"));
         m_white->setRange(0, 255);
-        connect(m_white, SIGNAL(sliderPressed()), SLOT(onBeginChange()));
-        connect(m_white, SIGNAL(sliderReleased()), SLOT(onEndChange()));
-        connect(m_white, SIGNAL(valueChanged(int)), SLOT(onSlider(int)));
+        connect(m_white, &Slider::sliderPressed, this, &MainWindow::onBeginChange);
+        connect(m_white, &Slider::sliderReleased, this, &MainWindow::onEndChange);
+        connect(m_white, &Slider::valueChanged, this, &MainWindow::onSlider);
 
 		layout->addWidget(m_black);
 		layout->addWidget(m_gamma);
@@ -201,7 +217,7 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
 
 	// TABS
 	m_tabs = new QTabBar;
-	connect(m_tabs, SIGNAL(currentChanged(int)), SLOT(onTab(int)));
+	connect(m_tabs, &QTabBar::currentChanged, this, &MainWindow::onTab);
 	m_tabs->blockSignals(true);
 	m_tabs->setExpanding(false);
 	m_tabs->addTab(tr("Mark"));
@@ -211,7 +227,7 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
 
 	QWidget *widget = new QWidget;
 	QVBoxLayout *layout = new QVBoxLayout(widget);
-    layout->setMargin(0);
+    layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
 	layout->addWidget(m_tabs);
 	layout->addWidget(m_scroller);
@@ -224,7 +240,7 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
     m_progressBar = new QProgressBar;
     m_cancel = new QPushButton(tr("Cancel"));
     m_cancel->setFixedHeight(20);
-    connect(m_cancel, SIGNAL(clicked()), SLOT(onCancelProgress()));
+    connect(m_cancel, &QPushButton::clicked, this, &MainWindow::onCancelProgress);
     statusBar()->addPermanentWidget(m_progressBar);
     statusBar()->addPermanentWidget(m_cancel);
     m_progressBar->hide();
@@ -251,38 +267,38 @@ void MainWindow::setupMenus()
 
 		// Open
 		m_open = menu->addAction(tr("&Open Image...", "File|Open"));
-		connect(m_open, SIGNAL(triggered()), this, SLOT(onOpenImage()));
+		connect(m_open, &QAction::triggered, this, &MainWindow::onOpenImage);
 
 		// Export
 		m_export = menu->addAction(tr("&Export...", "File|Export"));
-		connect(m_export, SIGNAL(triggered()), this, SLOT(onExport()));
+		connect(m_export, &QAction::triggered, this, &MainWindow::onExport);
 
 		// Close
 		m_close = menu->addAction(tr("&Close", "File|Close"));
 		m_close->setShortcut(QKeySequence::Close);
-		connect(m_close, SIGNAL(triggered()), this, SLOT(onClose()));
+		connect(m_close, &QAction::triggered, this, &MainWindow::onClose);
 
         // open cradle
 		m_loadCradle = menu->addAction(tr("Open &Cradle...", "File|Open"));
 		m_loadCradle->setShortcut(QKeySequence::Open);
-		connect(m_loadCradle, SIGNAL(triggered()), this, SLOT(onOpen()));
+		connect(m_loadCradle, &QAction::triggered, this, &MainWindow::onOpen);
 
 		// Save
 		m_save = menu->addAction(tr("&Save Cradle", "File|Save"));
 		m_save->setShortcut(QKeySequence::Save);
-		connect(m_save, SIGNAL(triggered()), this, SLOT(onSave()));
+		connect(m_save, &QAction::triggered, this, &MainWindow::onSave);
 
 		// Save As
 		m_saveAs = menu->addAction(tr("&Save Cradle As...", "File|Save As"));
 		m_saveAs->setShortcut(QKeySequence::SaveAs);
-		connect(m_saveAs, SIGNAL(triggered()), this, SLOT(onSaveAs()));
+		connect(m_saveAs, &QAction::triggered, this, &MainWindow::onSaveAs);
 
 		menu->addSeparator();
 
 		// Exit
 		QAction *exit = menu->addAction(tr("E&xit"));
 		exit->setShortcut(tr("Ctrl+Q", "File|Exit"));
-		connect(exit, SIGNAL(triggered()), this, SLOT(onExit()));
+		connect(exit, &QAction::triggered, this, &MainWindow::onExit);
 	}
 
 	// edit menu
@@ -291,11 +307,11 @@ void MainWindow::setupMenus()
 
 		m_undo = m_editMenu->addAction(tr("&Undo", "Edit|Undo"));
 		m_undo->setShortcut(QKeySequence::Undo);
-		connect(m_undo, SIGNAL(triggered()), m_undoMgr, SLOT(undo()));
+		connect(m_undo, &QAction::triggered, m_undoMgr, &UndoManager::undo);
 
 		m_redo = m_editMenu->addAction(tr("&Redo", "Edit|Redo"));
 		m_redo->setShortcut(QKeySequence::Redo);
-		connect(m_redo, SIGNAL(triggered()), m_undoMgr, SLOT(redo()));
+		connect(m_redo, &QAction::triggered, m_undoMgr, &UndoManager::redo);
 
 		m_editMenu->addSeparator();
 
@@ -304,7 +320,7 @@ void MainWindow::setupMenus()
 			QAction *action = m_editMenu->addAction(tr("Cu&t", "Edit|Cut"));
 			action->setShortcut(QKeySequence::Cut);
 			action->setData("cut");
-			connect(action, SIGNAL(triggered()), this, SLOT(onCommand()));
+			connect(action, &QAction::triggered, this, &MainWindow::onCommand);
 			m_commands << action;
 		}
 
@@ -313,7 +329,7 @@ void MainWindow::setupMenus()
 			QAction *action = m_editMenu->addAction(tr("&Copy", "Edit|Copy"));
 			action->setShortcut(QKeySequence::Copy);
 			action->setData("copy");
-			connect(action, SIGNAL(triggered()), this, SLOT(onCommand()));
+			connect(action, &QAction::triggered, this, &MainWindow::onCommand);
 			m_commands << action;
             m_copy = action;
 		}
@@ -323,7 +339,7 @@ void MainWindow::setupMenus()
 			QAction *action = m_editMenu->addAction(tr("&Paste", "Edit|Paste"));
 			action->setShortcut(QKeySequence::Paste);
 			action->setData("paste");
-			connect(action, SIGNAL(triggered()), this, SLOT(onCommand()));
+			connect(action, &QAction::triggered, this, &MainWindow::onCommand);
 			m_commands << action;
             m_paste = action;
 		}
@@ -331,15 +347,16 @@ void MainWindow::setupMenus()
 		// Delete
 		{
 			QAction *action = m_editMenu->addAction(tr("&Delete", "Edit|Delete"));
-            #if defined(Q_OS_MACX)
+            #if defined(Q_OS_MACOS)
                 action->setShortcut(QKeySequence(Qt::Key_Backspace));
 
-                QShortcut *shortcut = new QShortcut(QKeySequence(Qt::Key_Backspace), this, SLOT(onDelete()));
+                QShortcut *shortcut = new QShortcut(QKeySequence(Qt::Key_Backspace), this);
+                connect(shortcut, &QShortcut::activated, this, &MainWindow::onDelete);
             #else
                 action->setShortcut(QKeySequence::Delete);
             #endif
 			action->setData("delete");
-			connect(action, SIGNAL(triggered()), this, SLOT(onCommand()));
+			connect(action, &QAction::triggered, this, &MainWindow::onCommand);
 			m_commands << action;
             m_delete = action;
 		}
@@ -351,7 +368,7 @@ void MainWindow::setupMenus()
 			QAction *action = m_editMenu->addAction(tr("&Select All", "Edit|Select All"));
 			action->setShortcut(QKeySequence::SelectAll);
 			action->setData("selectAll");
-			connect(action, SIGNAL(triggered()), this, SLOT(onCommand()));
+			connect(action, &QAction::triggered, this, &MainWindow::onCommand);
 			m_commands << action;
 		}
 	}
@@ -360,18 +377,33 @@ void MainWindow::setupMenus()
 	{
 		m_viewMenu = menuBar()->addMenu(tr("&View"));
 
-		QAction *zoomFit = m_viewMenu->addAction(tr("Zoom to &fit", "View|Zoom to Fit"), m_viewer, SLOT(zoomToFit()), QKeySequence("f"));
-		QAction *zoom100 = m_viewMenu->addAction(tr("Zoom to 1:1", "View|Zoom to 1:1"), m_viewer, SLOT(zoom100()), QKeySequence("h"));
-		QAction *zoomIn = m_viewMenu->addAction(tr("Zoom &in", "View|Zoom In"), m_viewer, SLOT(zoomIn()), QKeySequence("i"));
-		QAction *zoomOut = m_viewMenu->addAction(tr("Zoom &out", "View|Zoom Out"), m_viewer, SLOT(zoomOut()), QKeySequence("o"));
+		QAction *zoomFit = m_viewMenu->addAction(tr("Zoom to &fit", "View|Zoom to Fit"));
+		zoomFit->setShortcut(QKeySequence("f"));
+		connect(zoomFit, &QAction::triggered, m_viewer, &Viewer::zoomToFit);
+
+		QAction *zoom100 = m_viewMenu->addAction(tr("Zoom to 1:1", "View|Zoom to 1:1"));
+		zoom100->setShortcut(QKeySequence("h"));
+		connect(zoom100, &QAction::triggered, m_viewer, &Viewer::zoom100);
+
+		QAction *zoomIn = m_viewMenu->addAction(tr("Zoom &in", "View|Zoom In"));
+		zoomIn->setShortcut(QKeySequence("i"));
+		connect(zoomIn, &QAction::triggered, m_viewer, &Viewer::zoomIn);
+
+		QAction *zoomOut = m_viewMenu->addAction(tr("Zoom &out", "View|Zoom Out"));
+		zoomOut->setShortcut(QKeySequence("o"));
+		connect(zoomOut, &QAction::triggered, m_viewer, &Viewer::zoomOut);
 	}
 
 	// help menu
 	{
 		QMenu *menu = menuBar()->addMenu(tr("&Help"));
 
-		menu->addAction(tr("&User Guide...", "Help|User Guide"), this, SLOT(onHelp()), QKeySequence("F1"));
-		menu->addAction(tr("&About...", "Help|About"), this, SLOT(onAbout()));
+		QAction *helpAction = menu->addAction(tr("&User Guide...", "Help|User Guide"));
+		helpAction->setShortcut(QKeySequence("F1"));
+		connect(helpAction, &QAction::triggered, this, &MainWindow::onHelp);
+
+		QAction *aboutAction = menu->addAction(tr("&About...", "Help|About"));
+		connect(aboutAction, &QAction::triggered, this, &MainWindow::onAbout);
 	}
 
 	updateMenus();
@@ -826,8 +858,7 @@ void MainWindow::save(const QString &path)
 		QMessageBox::critical(this,
 				QCoreApplication::applicationName(),
 				tr("Could not create file '%1'.\n%2").arg(path).arg(msg),
-				QMessageBox::Ok,
-				QMessageBox::NoButton);
+				QMessageBox::Ok);
 	}
 }
 
@@ -1440,7 +1471,7 @@ void MainWindow::onRemoveTexture()
 void MainWindow::onHelp()
 {
     QString appPath = QCoreApplication::applicationDirPath();
-    #if defined(Q_OS_MACX)
+    #if defined(Q_OS_MACOS)
         appPath = QFileInfo(appPath).absolutePath();
         appPath = QFileInfo(appPath).absolutePath();
 		appPath = QFileInfo(appPath).absolutePath();

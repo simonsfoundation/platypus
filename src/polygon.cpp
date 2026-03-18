@@ -3,7 +3,9 @@
 #include <QtCore/QVariant>
 #include <QtCore/QMimeData>
 #include <QtCore/QLine>
-#include <QtXml/QDomDocument>
+#include <QtCore/QXmlStreamReader>
+#include <QtCore/QXmlStreamWriter>
+#include <algorithm>
 #include <cmath>
 
 Polygon::Polygon(QObject *parent) : QObject(parent), m_selected(false), m_type(NONE)
@@ -36,9 +38,12 @@ Polygon *Polygon::clone() const
 	return new Polygon(*this);
 }
 
-void Polygon::load(const QDomElement &root)
+void Polygon::load(QXmlStreamReader &reader)
 {
-	QString type = root.attribute("type", "input");
+	// reader is positioned at the <polygon> start element
+	QXmlStreamAttributes attrs = reader.attributes();
+	QString type = attrs.value("type").toString();
+	if (type.isEmpty()) type = "input";
 	if (type == "input")
 		m_type = INPUT;
 	else if (type == "output")
@@ -48,78 +53,80 @@ void Polygon::load(const QDomElement &root)
 
 	Q_ASSERT(this->type() != NONE);
 
-	QDomElement valuesNode = root.firstChildElement("values");
-    if (!valuesNode.isNull())
-    {
-        QDomElement child = valuesNode.firstChildElement();
-        while (!child.isNull())
-        {
-            QString tagName = child.tagName();
-            QString text = child.text();
-            m_values[tagName] = text;
-            child = child.nextSiblingElement();
-        }
-    }
-
-	QDomElement pointsNode = root.firstChildElement("points");
-	QDomElement pointNode = pointsNode.firstChildElement("point");
-	while (!pointNode.isNull())
+	while (reader.readNextStartElement())
 	{
-		QString text = pointNode.text();
-		QStringList args = text.split(",");
-		if (args.size() == 2)
+		if (reader.name() == QLatin1String("values"))
 		{
-			QPoint pt(args[0].toInt(), args[1].toInt());
-			m_points << pt;
+			while (reader.readNextStartElement())
+			{
+				QString tagName = reader.name().toString();
+				QString text = reader.readElementText();
+				m_values[tagName] = text;
+			}
 		}
-		else if (args.size() == 6)
+		else if (reader.name() == QLatin1String("points"))
 		{
-			QPoint knot(args[0].toInt(), args[1].toInt());
-			QPoint tan_in(args[2].toInt(), args[3].toInt());
-			QPoint tan_out(args[4].toInt(), args[5].toInt());
-			m_points << Point(knot, tan_in, tan_out);
+			while (reader.readNextStartElement())
+			{
+				if (reader.name() == QLatin1String("point"))
+				{
+					QString text = reader.readElementText();
+					QStringList args = text.split(",");
+					if (args.size() == 2)
+					{
+						QPoint pt(args[0].toInt(), args[1].toInt());
+						m_points << pt;
+					}
+					else if (args.size() == 6)
+					{
+						QPoint knot(args[0].toInt(), args[1].toInt());
+						QPoint tan_in(args[2].toInt(), args[3].toInt());
+						QPoint tan_out(args[4].toInt(), args[5].toInt());
+						m_points << Point(knot, tan_in, tan_out);
+					}
+				}
+				else
+				{
+					reader.skipCurrentElement();
+				}
+			}
 		}
-		pointNode = pointNode.nextSiblingElement("point");
+		else
+		{
+			reader.skipCurrentElement();
+		}
 	}
 }
 
-void Polygon::save(QDomElement &parent) const
+void Polygon::save(QXmlStreamWriter &writer) const
 {
 	Q_ASSERT(type() != NONE);
 
-	QDomElement root = parent.ownerDocument().createElement("polygon");
-	parent.appendChild(root);
+	writer.writeStartElement("polygon");
+	writer.writeAttribute("type", m_type == INPUT ? "input" : m_type == OUTPUT ? "output" : "mask");
 
-	root.setAttribute("type", m_type == INPUT ? "input" : m_type == OUTPUT ? "output" : "mask");
-
-    // write properties
-	QDomElement values = parent.ownerDocument().createElement("values");
-	root.appendChild(values);
-    for (auto key : m_values.keys())
-    {
-        QVariant v = m_values.value(key);
-		QDomElement value = parent.ownerDocument().createElement(key);
-		values.appendChild(value);
-        value.appendChild(parent.ownerDocument().createTextNode(v.toString()));
-    }
-
-    // write points
-	QDomElement points = parent.ownerDocument().createElement("points");
-	root.appendChild(points);
-
-	for (auto pt : m_points)
+	// write properties
+	writer.writeStartElement("values");
+	for (auto it = m_values.constBegin(); it != m_values.constEnd(); ++it)
 	{
-		QDomElement point = parent.ownerDocument().createElement("point");
-		points.appendChild(point);
-        if (pt.tan_in.isNull() && pt.tan_out.isNull())
-            point.appendChild(parent.ownerDocument().createTextNode(QString("%1,%2").arg(pt.knot.x()).arg(pt.knot.y())));
-        else
-            point.appendChild(parent.ownerDocument().createTextNode(QString("%1,%2,%3,%4,%5,%6").
-                arg(pt.knot.x()).arg(pt.knot.y()).
-                arg(pt.tan_in.x()).arg(pt.tan_in.y()).
-                arg(pt.tan_out.x()).arg(pt.tan_out.y())
-                ));
+		writer.writeTextElement(it.key(), it.value().toString());
 	}
+	writer.writeEndElement(); // values
+
+	// write points
+	writer.writeStartElement("points");
+	for (const auto &pt : m_points)
+	{
+		if (pt.tan_in.isNull() && pt.tan_out.isNull())
+			writer.writeTextElement("point", QString("%1,%2").arg(pt.knot.x()).arg(pt.knot.y()));
+		else
+			writer.writeTextElement("point", QString("%1,%2,%3,%4,%5,%6")
+				.arg(pt.knot.x()).arg(pt.knot.y())
+				.arg(pt.tan_in.x()).arg(pt.tan_in.y())
+				.arg(pt.tan_out.x()).arg(pt.tan_out.y()));
+	}
+	writer.writeEndElement(); // points
+	writer.writeEndElement(); // polygon
 }
 
 void Polygon::set(const QPolygon &poly)
@@ -203,7 +210,7 @@ QLine Polygon::centerLine() const
 	PointList points = this->points();
 	if (isHorizontal())
 	{
-		qSort(points.begin(), points.end(), [&](const Point &lhs, const Point &rhs) {
+		std::sort(points.begin(), points.end(), [&](const Point &lhs, const Point &rhs) {
 			if (lhs.knot.x() == rhs.knot.x())
 				return lhs.knot.y() < rhs.knot.y();
 			return lhs.knot.x() < rhs.knot.x();
@@ -211,7 +218,7 @@ QLine Polygon::centerLine() const
 	}
 	else
 	{
-		qSort(points.begin(), points.end(), [&](const Point &lhs, const Point &rhs) {
+		std::sort(points.begin(), points.end(), [&](const Point &lhs, const Point &rhs) {
 			if (lhs.knot.y() == rhs.knot.y())
 				return lhs.knot.x() < rhs.knot.x();
 			return lhs.knot.y() < rhs.knot.y();

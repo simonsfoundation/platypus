@@ -1,7 +1,7 @@
 #ifndef UNDOMANAGER_H
 #define UNDOMANAGER_H
 
-#include <QtWidgets/QUndoStack>
+#include <QUndoStack>
 
 class UndoManager : public QUndoStack
 {

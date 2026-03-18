@@ -102,7 +102,7 @@ public:
         if (scale > 0.5f)
             level = 1;
 		level = std::max(level, 1);
-		level = std::min(level, m_levels.size());
+        level = std::min(level, int(m_levels.size()));
 
 		int ds = int(std::pow(2, level - 1));
 
@@ -137,7 +137,7 @@ ImageManager::ImageManager(QObject *parent) : QObject(parent), m_source(nullptr)
 	m_removeSource = new RemoveSource(this);
 
 	m_watcher = new QFutureWatcher<ImageSource *>(this);
-	connect(m_watcher, SIGNAL(finished()), SLOT(onLoadFinished()));
+	connect(m_watcher, &QFutureWatcher<ImageSource *>::finished, this, &ImageManager::onLoadFinished);
 }
 
 ImageManager::~ImageManager()
@@ -159,7 +159,7 @@ void ImageManager::load(const QString &path)
 
 	emit status("Loading image...");
 
-	QFuture<ImageSource *>future = QtConcurrent::run(this, &ImageManager::loadFunc, path);
+	QFuture<ImageSource *> future = QtConcurrent::run(&ImageManager::loadFunc, this, path);
 	m_watcher->setFuture(future);
 }
 

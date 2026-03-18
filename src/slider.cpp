@@ -18,13 +18,13 @@ Slider::Slider(QWidget *parent) : QWidget(parent), m_indeterminate(false)
     m_edit->setFixedWidth(40);
     m_edit->setAlignment(Qt::AlignRight);
 
-    connect(m_slider, SIGNAL(sliderPressed()), SLOT(onSliderPressed()));
-    connect(m_slider, SIGNAL(sliderReleased()), SLOT(onSliderReleased()));
-    connect(m_slider, SIGNAL(valueChanged(int)), SLOT(onValue(int)));
-    connect(m_edit, SIGNAL(editingFinished()), SLOT(onEdit()));
+    connect(m_slider, &QSlider::sliderPressed, this, &Slider::onSliderPressed);
+    connect(m_slider, &QSlider::sliderReleased, this, &Slider::onSliderReleased);
+    connect(m_slider, &QSlider::valueChanged, this, &Slider::onValue);
+    connect(m_edit, &QLineEdit::editingFinished, this, &Slider::onEdit);
 
     QHBoxLayout *layout = new QHBoxLayout(this);
-    layout->setMargin(0);
+    layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(m_label);
     layout->addWidget(m_slider);
     layout->addWidget(m_edit);

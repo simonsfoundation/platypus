@@ -17,10 +17,10 @@ void RemoveSource::setProject(Project *project)
     if (project != m_project)
     {
         if (m_project)
-            m_project->disconnect(SIGNAL(changed()), this, SLOT(invalidate()));
+            disconnect(m_project, &Project::changed, this, &RemoveSource::invalidate);
         m_project = project;
         if (m_project)
-            connect(m_project, SIGNAL(changed()), this, SLOT(invalidate()));
+            connect(m_project, &Project::changed, this, &RemoveSource::invalidate);
     }
 }
 

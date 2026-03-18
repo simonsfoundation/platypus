@@ -1,5 +1,6 @@
 #include <maskShape.h>
-#include <QtXml/QDomDocument>
+#include <QtCore/QXmlStreamReader>
+#include <QtCore/QXmlStreamWriter>
 #include <QtCore/QStringList>
 #include <QtCore/QVariant>
 #include <QtGui/QPolygonF>
@@ -22,44 +23,54 @@ QVariant MaskShape::get(const QString &key) const
 	return QVariant();
 }
 
-void MaskShape::load(const QDomElement &root)
+void MaskShape::load(QXmlStreamReader &reader)
 {
-	QDomElement pointsNode = root.firstChildElement("points");
-	QDomElement pointNode = pointsNode.firstChildElement("point");
-	while (!pointNode.isNull())
+	// reader is positioned at the <shape> start element
+	while (reader.readNextStartElement())
 	{
-		QString text = pointNode.text();
-		QStringList args = text.split(",");
-		if (args.size() == 6)
+		if (reader.name() == QLatin1String("points"))
 		{
-			QPointF knot(args[0].toFloat(), args[1].toFloat());
-			QPointF ti(args[2].toFloat(), args[3].toFloat());
-			QPointF to(args[4].toFloat(), args[5].toFloat());
-			m_points << Point(knot, ti, to);
+			while (reader.readNextStartElement())
+			{
+				if (reader.name() == QLatin1String("point"))
+				{
+					QString text = reader.readElementText();
+					QStringList args = text.split(",");
+					if (args.size() == 6)
+					{
+						QPointF knot(args[0].toFloat(), args[1].toFloat());
+						QPointF ti(args[2].toFloat(), args[3].toFloat());
+						QPointF to(args[4].toFloat(), args[5].toFloat());
+						m_points << Point(knot, ti, to);
+					}
+				}
+				else
+				{
+					reader.skipCurrentElement();
+				}
+			}
 		}
-		pointNode = pointNode.nextSiblingElement("point");
+		else
+		{
+			reader.skipCurrentElement();
+		}
 	}
 }
 
-void MaskShape::save(QDomElement &parent) const
+void MaskShape::save(QXmlStreamWriter &writer) const
 {
-	QDomElement root = parent.ownerDocument().createElement("shape");
-	parent.appendChild(root);
-
-	QDomElement points = parent.ownerDocument().createElement("points");
-	root.appendChild(points);
-
-	for (auto pt : m_points)
+	writer.writeStartElement("shape");
+	writer.writeStartElement("points");
+	for (const auto &pt : m_points)
 	{
-		QDomElement point = parent.ownerDocument().createElement("point");
-		points.appendChild(point);
-		point.appendChild(parent.ownerDocument().createTextNode(
-			QString("%1,%2,%3,%4,%5,%6").
-				arg(pt.knot.x()).arg(pt.knot.y()).
-				arg(pt.tan_in.x()).arg(pt.tan_in.y()).
-				arg(pt.tan_out.x()).arg(pt.tan_out.y())
-				));
+		writer.writeTextElement("point",
+			QString("%1,%2,%3,%4,%5,%6")
+				.arg(pt.knot.x()).arg(pt.knot.y())
+				.arg(pt.tan_in.x()).arg(pt.tan_in.y())
+				.arg(pt.tan_out.x()).arg(pt.tan_out.y()));
 	}
+	writer.writeEndElement(); // points
+	writer.writeEndElement(); // shape
 }
 
 void MaskShape::set(const PointList &points)

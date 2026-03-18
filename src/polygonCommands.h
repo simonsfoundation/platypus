@@ -2,7 +2,7 @@
 #define POLYGONCOMMANDS_H
 
 #include <polygon.h>
-#include <QtWidgets/QUndoCommand>
+#include <QUndoCommand>
 
 class AddPolygonCommand : public QUndoCommand
 {

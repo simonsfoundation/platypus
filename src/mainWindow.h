@@ -9,7 +9,7 @@ class MainWindow : public QMainWindow
 	Q_OBJECT
 
 public:
-	MainWindow(Project *project, QWidget *parent = 0);
+	MainWindow(Project *project, QWidget *parent = nullptr);
 	~MainWindow();
 
 	void open(const QString &path, bool pluginMode = false);

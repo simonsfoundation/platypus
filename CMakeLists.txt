@@ -13,28 +13,38 @@ set(CMAKE_VERBOSE_MAKEFILE YES)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 # Specify C++ standard
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-if (WIN32)
-else()
-  set(OpenCV_STATIC ON)
-  set(QT_STATIC ON)
-  add_definitions(-DQT_STATIC)
-endif()
-set(QT_PLUGINS "")
-# Find the required Qt packages
-find_package(Qt5 5 REQUIRED COMPONENTS Core Gui Widgets Xml)
 # Configuration Options
 option(BUILD_PHOTOSHOP_PLUGIN "Build the Photoshop plugin" OFF)
 option(BUILD_APPLE_APP "Build the Apple App instead of an executable" OFF)
-# Find OpenCV
-find_package(OpenCV)
-# If still not found, provide an error message
-if(NOT OpenCV_FOUND AND NOT OpenCV_DIR)
-    message(FATAL_ERROR "OpenCV not found! Please set OpenCV_DIR to the path where OpenCV is installed.")
-endif()
 option(OpenCV_DIR "Path to OpenCV if not found automatically" "")
 
-# If not found, try using the user-specified path
-find_package(OpenCV REQUIRED PATHS ${OpenCV_DIR} NO_DEFAULT_PATH)
+if (NOT WIN32)
+  set(OpenCV_STATIC ON)
+endif()
+
+# Find the required Qt packages
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Concurrent)
+if(NOT Qt6_FOUND)
+    message(FATAL_ERROR
+        "Qt6 not found!\n"
+        "  Run ./configure.sh (macOS/Linux) or configure.bat (Windows) to set up dependencies via vcpkg.\n")
+endif()
+
+# Find OpenCV
+if(OpenCV_DIR)
+    find_package(OpenCV REQUIRED PATHS ${OpenCV_DIR} NO_DEFAULT_PATH)
+else()
+    find_package(OpenCV)
+endif()
+if(NOT OpenCV_FOUND)
+    message(FATAL_ERROR
+        "OpenCV not found!\n"
+        "  Run ./configure.sh (macOS/Linux) or configure.bat (Windows) to set up dependencies automatically.\n"
+        "  Or install manually:\n"
+        "    macOS:  brew install opencv\n"
+        "    Linux:  sudo apt-get install libopencv-dev\n"
+        "    Windows: use vcpkg (see readme.md)\n")
+endif()
 
 include(FetchContent)
 
@@ -133,7 +143,7 @@ endif()
 
 # Link against Qt and OpenCV libraries
 target_link_libraries(PlatypusGui PRIVATE
-  Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Xml ${OpenCV_LIBS} platypus)
+  Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent ${OpenCV_LIBS} platypus)
 
 # Only find and link xcb on Linux
 if(UNIX AND NOT APPLE)

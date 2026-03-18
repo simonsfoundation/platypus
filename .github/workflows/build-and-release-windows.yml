@@ -66,7 +66,7 @@ jobs:
       - name: Deploy Qt Dependencies (Windows)
         shell: cmd
         run: |
-          set PATH=%PATH%;%CD%\vcpkg_installed\x64-windows\tools\qt5\bin
+          set PATH=%PATH%;%CD%\vcpkg_installed\x64-windows\tools\qttools\bin
           windeployqt.exe --compiler-runtime --dir build\deployment build\PlatypusGui.exe
 
       # 6. Upload artifacts for release

@@ -12,76 +12,76 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
+    env:
+      _VCPKG_: ${{ github.workspace }}/vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg/bincache
+      VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
 
     steps:
-    # Get dependencies
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
-    - name: Get Ninja
-      uses: seanmiddleditch/gha-setup-ninja@master
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up CMake
-      uses: jwlawson/actions-setup-cmake@v1
-      with:
-        cmake-version: '3.16'
+      - name: "Create directory '${{ env.VCPKG_DEFAULT_BINARY_CACHE }}'"
+        run: mkdir -p $VCPKG_DEFAULT_BINARY_CACHE
+        shell: bash
 
-    - name: Install Qt
-      if : matrix.os != 'macos-latest'
-      uses: jurplel/install-qt-action@v4
-      with:
-        cache: true
+      - name: Get CMake
+        uses: lukka/get-cmake@latest
 
-    ## Linux setup ##
-    - name: Install dependencies on Linux
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libopencv-dev libxcb1-dev
+      - name: Get Ninja
+        uses: seanmiddleditch/gha-setup-ninja@master
 
-    # 3. Configure CMake
-    - name: Configure CMake
-      if : matrix.os == 'ubuntu-latest'
-      run: cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
-    ## End Linux setup ##
+      ## Linux setup ##
+      - name: Install dependencies on Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopencv-dev libxcb1-dev libxcb-cursor-dev \
+            libxcb-icccm4-dev libxcb-image0-dev libxcb-keysyms1-dev \
+            libxcb-randr0-dev libxcb-render-util0-dev libxcb-shape0-dev \
+            libxcb-shm0-dev libxcb-sync-dev libxcb-xfixes0-dev \
+            libxcb-xinerama0-dev libxcb-xkb-dev libx11-dev libxext-dev \
+            libxrender-dev libx11-xcb-dev libxcb-glx0-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libgl1-mesa-dev
 
-    ## macOS setup ##
-    - name: Install dependencies on macOS
-      if: matrix.os == 'macos-latest'
-      run: |
-        brew install opencv qt@5
+      - name: Restore from cache and setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgJsonGlob: 'vcpkg.json'
 
-    # Configure CMake for macOS
-    - name: Configure CMake (macOS)
-      if: matrix.os == 'macos-latest'
-      run: |
-        export PATH="/opt/homebrew/opt/qt@5/bin:$PATH"
-        cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 -DBUILD_APPLE_APP=ON
-    ## End macOS setup ##
+      # Configure CMake
+      - name: Configure CMake (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
 
-    # 4. Build the project
-    - name: Build PlatypusGui
-      run: cmake --build build --config Release --target PlatypusGui
+      - name: Configure CMake (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 -DBUILD_APPLE_APP=ON \
+            -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
 
-    - name: Deploy Qt Dependencies (mac)
-      if: matrix.os == 'macos-latest'
-      run: |
-        export PATH="/opt/homebrew/opt/qt@5/bin:$PATH"
-        macdeployqt ./build/PlatypusGui.app  -always-overwrite -hardened-runtime -timestamp
+      - name: Build PlatypusGui
+        run: cmake --build build --config Release --target PlatypusGui
 
-    # After macdeployqt
-    #- name: Deploy OpenCV Libraries
-    #  if: matrix.os == 'macos-latest'
-    #  run: |
-    #    chmod +x ./scripts/deploy_opencv.sh
-    #    ./scripts/deploy_opencv.sh
+      - name: Deploy Qt Dependencies (mac)
+        if: matrix.os == 'macos-latest'
+        run: |
+          macdeployqt ./build/PlatypusGui.app -always-overwrite -hardened-runtime -timestamp
 
-    # 6. Upload artifacts for release
-    - name: Upload Release Artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: ${{ matrix.os }}-platypus
-        path: |
-          build/PlatypusGui.app
-          build/PlatypusGui
-
+      # Upload artifacts for release
+      - name: Upload Release Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.os }}-platypus
+          path: |
+            build/PlatypusGui.app
+            build/PlatypusGui

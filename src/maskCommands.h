@@ -2,7 +2,7 @@
 #define MASKCOMMANDS_H
 
 #include <mask.h>
-#include <QtWidgets/QUndoCommand>
+#include <QUndoCommand>
 #include <QtCore/QVariant>
 
 class AddMaskShapeCommand : public QUndoCommand

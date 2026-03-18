@@ -9,7 +9,7 @@ class ImageSource : public QObject
 	Q_OBJECT
 
 public:
-	ImageSource(QObject *parent = NULL);
+	ImageSource(QObject *parent = nullptr);
 
 	virtual QSize size() const = 0;
 	virtual QString name() const = 0;

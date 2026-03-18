@@ -6,7 +6,7 @@
 
 ImageViewer::ImageViewer(QWidget *parent) : QWidget(parent)
 {
-	m_source = NULL;
+	m_source = nullptr;
 	m_zoom = 1.0f;
 	m_margin = QSize(10, 10);
 	m_defaultSize = QSize(1000, 800);
@@ -128,18 +128,18 @@ void ImageViewer::setMargin(const QSize &size)
 void ImageViewer::setSource(const ImageSource *source)
 {
 	if (m_source)
-		disconnect(m_source, SIGNAL(changed()), this, SLOT(updateImage()));
+		disconnect(m_source, &ImageSource::changed, this, &ImageViewer::updateImage);
 	m_source = source;
 	if (source)
 	{
-		connect(m_source, SIGNAL(changed()), SLOT(updateImage()));
-		connect(m_source, SIGNAL(destroyed(QObject *)), SLOT(onSourceDestroyed(QObject *)));
+		connect(m_source, &ImageSource::changed, this, &ImageViewer::updateImage);
+		connect(m_source, &QObject::destroyed, this, &ImageViewer::onSourceDestroyed);
 		m_sourceSize = source->size();
 	}
 	else
 		m_sourceSize = QSize(0, 0);
 
-	setEnabled(m_source != NULL);
+	setEnabled(m_source != nullptr);
 	updateImage();
 }
 
@@ -389,7 +389,7 @@ void ImageViewer::wheelEvent(QWheelEvent *event)
 {
 	if (m_wheelEnabled)
 	{
-		double delta = (double)event->delta() / 120.0 / 10.0;
+		double delta = (double)event->angleDelta().y() / 120.0 / 10.0;
 		double new_zoom = m_zoom + (delta * m_zoom);
 
 		if (m_zoom < 1.0f && new_zoom > 1.0f)
@@ -399,7 +399,7 @@ void ImageViewer::wheelEvent(QWheelEvent *event)
 
 		event->accept();
 
-		zoom(event->pos(), new_zoom);
+		zoom(event->position().toPoint(), new_zoom);
 	}
 }
 
