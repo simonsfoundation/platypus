@@ -54,7 +54,6 @@ if [[ -f "${ENV_FILE}" ]]; then
 fi
 
 APP_PATH="${PLATYPUS_APP_PATH:-build/PlatypusGui.app}"
-APP_EXECUTABLE_PATH="${APP_PATH}/Contents/MacOS/$(basename "${APP_PATH}" .app)"
 IDENTITY="${APPLE_SIGNING_IDENTITY:-}"
 MACDEPLOYQT_BIN="${MACDEPLOYQT_BIN:-}"
 SKIP_DEPLOY=0
@@ -113,6 +112,8 @@ if [[ ! -d "$APP_PATH" ]]; then
   echo "App bundle not found: $APP_PATH" >&2
   exit 1
 fi
+
+APP_EXECUTABLE_PATH="${APP_PATH}/Contents/MacOS/$(basename "${APP_PATH}" .app)"
 
 cd "${REPO_ROOT}"
 
