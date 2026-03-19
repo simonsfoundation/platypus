@@ -95,6 +95,11 @@ if [[ -z "${IDENTITY}" && "${VERIFY_ONLY}" -eq 0 ]]; then
   exit 1
 fi
 
+BUNDLE_NAME="$(basename "${BUNDLE_PATH}")"
+BUNDLE_NAME="${BUNDLE_NAME%.app}"
+BUNDLE_NAME="${BUNDLE_NAME%.plugin}"
+BUNDLE_EXECUTABLE_PATH="${BUNDLE_PATH}/Contents/MacOS/${BUNDLE_NAME}"
+
 sign_path() {
   local path="$1"
   echo "Signing ${path}"
@@ -129,6 +134,9 @@ if [[ "${VERIFY_ONLY}" -eq 0 ]]; then
       -type f \( -name '*.dylib' -o -name '*.so' \) -print0 | sort -z)
 
   while IFS= read -r -d '' exec_file; do
+    if [[ "${exec_file}" == "${BUNDLE_EXECUTABLE_PATH}" ]]; then
+      continue
+    fi
     sign_path "${exec_file}"
   done < <(find "${BUNDLE_PATH}/Contents" "${bundle_prune_expr[@]}" -o \
       -type f -perm -111 ! \( -name '*.dylib' -o -name '*.so' \) -print0 | sort -z)
