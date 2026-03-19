@@ -136,8 +136,8 @@ jobs:
           HOMEBREW_NO_INSTALL_CLEANUP: "1"
         run: |
           set -euo pipefail
-          mapfile -t BREW_PACKAGES < .github/homebrew/release-macos.txt
-          brew install "${BREW_PACKAGES[@]}"
+          BREW_PACKAGES="$(grep -Ev '^[[:space:]]*(#|$)' .github/homebrew/release-macos.txt | tr '\n' ' ')"
+          brew install ${BREW_PACKAGES}
           echo "$(brew --prefix qt)/bin" >> "$GITHUB_PATH"
 
       - name: Configure app CMake
