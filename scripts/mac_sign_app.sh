@@ -136,6 +136,22 @@ if [[ "$VERIFY_ONLY" -eq 0 ]]; then
     codesign --force --sign "$IDENTITY" --options runtime --timestamp "$path"
   }
 
+  framework_sign_target() {
+    local framework_path="$1"
+    if [[ -d "${framework_path}/Versions/Current" ]]; then
+      printf '%s\n' "${framework_path}/Versions/Current"
+      return
+    fi
+
+    local version_dir
+    while IFS= read -r -d '' version_dir; do
+      printf '%s\n' "${version_dir}"
+      return
+    done < <(find "${framework_path}/Versions" -mindepth 1 -maxdepth 1 -type d ! -name Current -print0 | sort -z)
+
+    printf '%s\n' "${framework_path}"
+  }
+
   bundle_prune_expr=(
     \( -name '*.framework' -o -name '*.app' -o -name '*.bundle' -o -name '*.plugin' -o -name '*.xpc' \)
     -prune
@@ -155,7 +171,7 @@ if [[ "$VERIFY_ONLY" -eq 0 ]]; then
       -type f -perm -111 ! \( -name '*.dylib' -o -name '*.so' \) -print0 | sort -z)
 
   while IFS= read -r -d '' framework; do
-    sign_path "$framework"
+    sign_path "$(framework_sign_target "$framework")"
   done < <(find "$APP_PATH/Contents" -name '*.framework' -print0 | sort -z)
 
   while IFS= read -r -d '' bundle; do

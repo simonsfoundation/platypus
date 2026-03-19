@@ -33,12 +33,13 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     outputs:
       package_version: ${{ steps.package_version.outputs.value }}
+      target_sha: ${{ steps.resolve_target.outputs.sha }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.target_ref }}
+          ref: main
           fetch-depth: 0
 
       - name: Validate release tag
@@ -60,6 +61,15 @@ jobs:
           PACKAGE_VERSION="${PACKAGE_VERSION#v}"
           echo "value=${PACKAGE_VERSION}" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve target ref
+        id: resolve_target
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET_REF="${{ github.event.inputs.target_ref }}"
+          TARGET_SHA="$(git rev-parse --verify "${TARGET_REF}^{commit}")"
+          echo "sha=${TARGET_SHA}" >> "$GITHUB_OUTPUT"
+
       - name: Check for existing release
         shell: bash
         run: |
@@ -75,10 +85,9 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${{ github.event.inputs.tag }}"
-          TARGET_REF="${{ github.event.inputs.target_ref }}"
           git fetch --tags origin
           if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
-            git tag "$TAG" "$TARGET_REF"
+            git tag "$TAG" "${{ steps.resolve_target.outputs.sha }}"
             git push origin "refs/tags/$TAG"
           fi
 
@@ -110,13 +119,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.target_ref }}
+          ref: ${{ needs.prepare.outputs.target_sha }}
+
+      - name: Restore Homebrew download cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/Homebrew/api
+            ~/Library/Caches/Homebrew/downloads
+          key: homebrew-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('.github/homebrew/release-macos.txt') }}
 
       - name: Install build dependencies
         shell: bash
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
         run: |
           set -euo pipefail
-          brew install ninja qt opencv
+          mapfile -t BREW_PACKAGES < .github/homebrew/release-macos.txt
+          brew install "${BREW_PACKAGES[@]}"
           echo "$(brew --prefix qt)/bin" >> "$GITHUB_PATH"
 
       - name: Configure app CMake
@@ -412,7 +433,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.target_ref }}
+          ref: ${{ needs.prepare.outputs.target_sha }}
 
       - name: Download release artifacts
         uses: actions/download-artifact@v4
@@ -435,7 +456,7 @@ jobs:
           fi
           gh release create "$TAG" \
             "${RELEASE_FILES[@]}" \
-            --target "${{ github.event.inputs.target_ref }}" \
+            --target "${{ needs.prepare.outputs.target_sha }}" \
             --title "$TAG" \
             --generate-notes \
             "${RELEASE_ARGS[@]}"
