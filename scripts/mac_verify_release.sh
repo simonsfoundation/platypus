@@ -123,8 +123,8 @@ run_optional_check() {
 check_app_signature_metadata() {
   local log_file="${REPORT_DIR}/codesign-display.log"
   codesign -dvv "${APP_PATH}" >"${log_file}" 2>&1
-  rg -q "Authority=Developer ID Application:" "${log_file}" &&
-    rg -q "Runtime Version=" "${log_file}"
+  grep -q "Authority=Developer ID Application:" "${log_file}" &&
+    grep -q "Runtime Version=" "${log_file}"
 }
 
 check_nested_code_signatures() {
@@ -161,7 +161,7 @@ check_release_entitlements() {
 
   codesign -d --entitlements - "${APP_PATH}" >"${entitlements_file}" 2>"${stderr_file}" || true
 
-  if rg -q "<plist|<dict|<key>" "${entitlements_file}"; then
+  if grep -Eq "<plist|<dict|<key>" "${entitlements_file}"; then
     echo "Release app unexpectedly contains entitlements:" >&2
     cat "${entitlements_file}" >&2
     return 1
