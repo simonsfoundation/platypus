@@ -54,6 +54,7 @@ if [[ -f "${ENV_FILE}" ]]; then
 fi
 
 APP_PATH="${PLATYPUS_APP_PATH:-build/PlatypusGui.app}"
+APP_EXECUTABLE_PATH="${APP_PATH}/Contents/MacOS/$(basename "${APP_PATH}" .app)"
 IDENTITY="${APPLE_SIGNING_IDENTITY:-}"
 MACDEPLOYQT_BIN="${MACDEPLOYQT_BIN:-}"
 SKIP_DEPLOY=0
@@ -145,6 +146,9 @@ if [[ "$VERIFY_ONLY" -eq 0 ]]; then
       -type f \( -name '*.dylib' -o -name '*.so' \) -print0 | sort -z)
 
   while IFS= read -r -d '' exec_file; do
+    if [[ "$exec_file" == "$APP_EXECUTABLE_PATH" ]]; then
+      continue
+    fi
     sign_path "$exec_file"
   done < <(find "$APP_PATH/Contents" "${bundle_prune_expr[@]}" -o \
       -type f -perm -111 ! \( -name '*.dylib' -o -name '*.so' \) -print0 | sort -z)
