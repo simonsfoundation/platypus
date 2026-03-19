@@ -1,0 +1,337 @@
+include(BundleUtilities)
+
+set(BU_CHMOD_BUNDLE_ITEMS ON)
+set(BU_COPY_FULL_FRAMEWORK_CONTENTS ON)
+
+set(_platypus_stage_root_raw "@PLATYPUS_PHOTOSHOP_RELEASE_STAGE_DIR@")
+set(_platypus_macdeployqt "@MACDEPLOYQT_EXECUTABLE@")
+set(_platypus_qt_plugin_dir "@PLATYPUS_QT_PLUGIN_DIR@")
+set(_platypus_qt_plugin_files "@PLATYPUS_QT_PLUGIN_FILES_JOINED@")
+set(_platypus_extra_dirs "@PLATYPUS_BUNDLE_FIXUP_DIRS_JOINED@")
+
+if(NOT EXISTS "${_platypus_stage_root_raw}")
+  message(FATAL_ERROR "Photoshop release stage root not found: ${_platypus_stage_root_raw}")
+endif()
+get_filename_component(_platypus_stage_root "${_platypus_stage_root_raw}" REALPATH)
+set(_platypus_app_bundle "${_platypus_stage_root}/Platypus.app")
+set(_platypus_plugin_bundle "${_platypus_stage_root}/Platypus.plugin")
+set(_platypus_plugin_binary "${_platypus_plugin_bundle}/Contents/MacOS/Platypus")
+set(_platypus_plugin_frameworks_dir
+    "${_platypus_plugin_bundle}/Contents/Frameworks")
+
+if(NOT EXISTS "${_platypus_app_bundle}")
+  message(FATAL_ERROR "Photoshop companion app bundle not found: ${_platypus_app_bundle}")
+endif()
+if(NOT EXISTS "${_platypus_plugin_bundle}")
+  message(FATAL_ERROR "Photoshop plugin bundle not found: ${_platypus_plugin_bundle}")
+endif()
+if(NOT EXISTS "${_platypus_plugin_binary}")
+  message(FATAL_ERROR "Photoshop plugin executable not found: ${_platypus_plugin_binary}")
+endif()
+if(NOT EXISTS "${_platypus_macdeployqt}")
+  message(FATAL_ERROR "macdeployqt not found: ${_platypus_macdeployqt}")
+endif()
+
+function(_platypus_run_checked)
+  execute_process(
+    COMMAND ${ARGN}
+    RESULT_VARIABLE _platypus_result
+    OUTPUT_VARIABLE _platypus_stdout
+    ERROR_VARIABLE _platypus_stderr
+  )
+  if(NOT _platypus_result EQUAL 0)
+    string(STRIP "${_platypus_stdout}" _platypus_stdout)
+    string(STRIP "${_platypus_stderr}" _platypus_stderr)
+    message(FATAL_ERROR
+      "Command failed (${_platypus_result}): ${ARGN}\n"
+      "stdout:\n${_platypus_stdout}\n"
+      "stderr:\n${_platypus_stderr}")
+  endif()
+endfunction()
+
+function(_platypus_is_system_dependency dep out_var)
+  if("${dep}" MATCHES "^/System/Library/" OR "${dep}" MATCHES "^/usr/lib/")
+    set(${out_var} TRUE PARENT_SCOPE)
+  else()
+    set(${out_var} FALSE PARENT_SCOPE)
+  endif()
+endfunction()
+
+function(_platypus_normalize_dependency dep out_var)
+  if("${dep}" MATCHES "^/System/Library/" OR "${dep}" MATCHES "^/usr/lib/")
+    set(${out_var} "${dep}" PARENT_SCOPE)
+  elseif(IS_ABSOLUTE "${dep}" AND EXISTS "${dep}")
+    file(REAL_PATH "${dep}" _platypus_dep_real)
+    set(${out_var} "${_platypus_dep_real}" PARENT_SCOPE)
+  else()
+    set(${out_var} "${dep}" PARENT_SCOPE)
+  endif()
+endfunction()
+
+function(_platypus_dependency_install_name dep out_var)
+  if("${dep}" MATCHES "^@rpath/")
+    set(${out_var} "${dep}" PARENT_SCOPE)
+  elseif("${dep}" MATCHES "^(.*\\.framework)/(.*)$")
+    get_filename_component(_platypus_framework_name "${CMAKE_MATCH_1}" NAME)
+    set(${out_var}
+        "@rpath/${_platypus_framework_name}/${CMAKE_MATCH_2}"
+        PARENT_SCOPE)
+  else()
+    get_filename_component(_platypus_dep_name "${dep}" NAME)
+    set(${out_var} "@rpath/${_platypus_dep_name}" PARENT_SCOPE)
+  endif()
+endfunction()
+
+function(_platypus_bundle_binary_install_name binary_path out_var)
+  file(REAL_PATH "${binary_path}" _platypus_binary_real)
+  file(RELATIVE_PATH _platypus_binary_rel
+       "${_platypus_plugin_frameworks_dir}"
+       "${_platypus_binary_real}")
+  set(${out_var} "@rpath/${_platypus_binary_rel}" PARENT_SCOPE)
+endfunction()
+
+function(_platypus_expected_rpath binary_path out_var)
+  if("${binary_path}" STREQUAL "${_platypus_plugin_binary}")
+    set(${out_var} "@loader_path/../Frameworks" PARENT_SCOPE)
+  elseif("${binary_path}" MATCHES [[/Contents/Frameworks/[^/]+\.framework/]])
+    set(${out_var} "@loader_path/../../../" PARENT_SCOPE)
+  else()
+    set(${out_var} "@loader_path" PARENT_SCOPE)
+  endif()
+endfunction()
+
+function(_platypus_collect_rpaths binary_path out_var)
+  _platypus_run_checked(
+    /bin/bash -lc
+    "otool -l \"$1\" | awk '/cmd LC_RPATH/{getline; getline; if ($1==\"path\") print $2}'"
+    dummy "${binary_path}")
+endfunction()
+
+function(_platypus_get_binary_dependencies binary_path out_var)
+  _platypus_run_checked(otool -L "${binary_path}")
+endfunction()
+
+function(_platypus_rewrite_binary binary_path)
+  _platypus_expected_rpath("${binary_path}" _platypus_target_rpath)
+  execute_process(
+    COMMAND otool -L "${binary_path}"
+    RESULT_VARIABLE _platypus_otool_result
+    OUTPUT_VARIABLE _platypus_otool_output
+    ERROR_VARIABLE _platypus_otool_error
+  )
+  if(NOT _platypus_otool_result EQUAL 0)
+    message(FATAL_ERROR
+      "Failed to inspect dependencies for ${binary_path}:\n${_platypus_otool_error}")
+  endif()
+
+  string(REPLACE "\n" ";" _platypus_dep_lines "${_platypus_otool_output}")
+  set(_platypus_needs_local_rpath FALSE)
+  if("${binary_path}" STREQUAL "${_platypus_plugin_binary}")
+    set(_platypus_skip_self_id FALSE)
+  else()
+    set(_platypus_skip_self_id TRUE)
+  endif()
+  foreach(_platypus_dep_line IN LISTS _platypus_dep_lines)
+    string(STRIP "${_platypus_dep_line}" _platypus_dep_line)
+    if(_platypus_dep_line MATCHES "^(.+) \\(compatibility version .+\\)$")
+      set(_platypus_dep "${CMAKE_MATCH_1}")
+      if(_platypus_skip_self_id)
+        set(_platypus_skip_self_id FALSE)
+        continue()
+      endif()
+      _platypus_normalize_dependency("${_platypus_dep}" _platypus_normalized_dep)
+      _platypus_is_system_dependency("${_platypus_normalized_dep}" _platypus_is_system)
+      if(_platypus_is_system)
+        continue()
+      endif()
+
+      if(_platypus_dep MATCHES "^@rpath/")
+        set(_platypus_needs_local_rpath TRUE)
+        continue()
+      endif()
+
+      if(_platypus_dep MATCHES "^@loader_path/")
+        continue()
+      endif()
+
+      if(_platypus_dep MATCHES "^@executable_path/")
+        message(FATAL_ERROR
+          "Unexpected executable-relative dependency in Photoshop plugin bundle: "
+          "${binary_path} -> ${_platypus_dep}")
+      endif()
+
+      _platypus_dependency_install_name("${_platypus_normalized_dep}" _platypus_rewritten_dep)
+      set(_platypus_needs_local_rpath TRUE)
+      if(NOT "${_platypus_dep}" STREQUAL "${_platypus_rewritten_dep}")
+        _platypus_run_checked(
+          install_name_tool -change
+            "${_platypus_dep}"
+            "${_platypus_rewritten_dep}"
+            "${binary_path}")
+      endif()
+    endif()
+  endforeach()
+
+  if("${binary_path}" STREQUAL "${_platypus_plugin_binary}")
+    set(_platypus_needs_local_rpath TRUE)
+  endif()
+
+  if(_platypus_needs_local_rpath)
+    execute_process(
+      COMMAND /bin/bash -lc
+              "otool -l \"$1\" | awk '/cmd LC_RPATH/{getline; getline; if ($1==\"path\") print $2}'"
+              dummy "${binary_path}"
+      RESULT_VARIABLE _platypus_rpath_result
+      OUTPUT_VARIABLE _platypus_rpath_output
+      ERROR_VARIABLE _platypus_rpath_error
+    )
+    if(NOT _platypus_rpath_result EQUAL 0)
+      message(FATAL_ERROR
+        "Failed to inspect LC_RPATH entries for ${binary_path}:\n${_platypus_rpath_error}")
+    endif()
+
+    string(REPLACE "\n" ";" _platypus_rpaths "${_platypus_rpath_output}")
+    foreach(_platypus_rpath IN LISTS _platypus_rpaths)
+      string(STRIP "${_platypus_rpath}" _platypus_rpath)
+      if(_platypus_rpath AND NOT "${_platypus_rpath}" STREQUAL "${_platypus_target_rpath}")
+        _platypus_run_checked(
+          install_name_tool -delete_rpath "${_platypus_rpath}" "${binary_path}")
+      endif()
+    endforeach()
+
+    list(FIND _platypus_rpaths "${_platypus_target_rpath}" _platypus_target_rpath_index)
+    if(_platypus_target_rpath_index EQUAL -1)
+      _platypus_run_checked(
+        install_name_tool -add_rpath "${_platypus_target_rpath}" "${binary_path}")
+    endif()
+  endif()
+endfunction()
+
+function(_platypus_verify_bundle_binary binary_path)
+  execute_process(
+    COMMAND otool -L "${binary_path}"
+    RESULT_VARIABLE _platypus_otool_result
+    OUTPUT_VARIABLE _platypus_otool_output
+    ERROR_VARIABLE _platypus_otool_error
+  )
+  if(NOT _platypus_otool_result EQUAL 0)
+    message(FATAL_ERROR
+      "Failed to inspect dependencies for ${binary_path} during verification:\n"
+      "${_platypus_otool_error}")
+  endif()
+
+  string(REPLACE "\n" ";" _platypus_dep_lines "${_platypus_otool_output}")
+  if("${binary_path}" STREQUAL "${_platypus_plugin_binary}")
+    set(_platypus_skip_self_id FALSE)
+  else()
+    set(_platypus_skip_self_id TRUE)
+  endif()
+  foreach(_platypus_dep_line IN LISTS _platypus_dep_lines)
+    string(STRIP "${_platypus_dep_line}" _platypus_dep_line)
+    if(_platypus_dep_line MATCHES "^(.+) \\(compatibility version .+\\)$")
+      set(_platypus_dep "${CMAKE_MATCH_1}")
+      if(_platypus_skip_self_id)
+        set(_platypus_skip_self_id FALSE)
+        continue()
+      endif()
+      _platypus_normalize_dependency("${_platypus_dep}" _platypus_normalized_dep)
+      _platypus_is_system_dependency("${_platypus_normalized_dep}" _platypus_is_system)
+      if(_platypus_is_system)
+        continue()
+      endif()
+      if(NOT _platypus_dep MATCHES "^@rpath/" AND
+         NOT _platypus_dep MATCHES "^@loader_path/")
+        message(FATAL_ERROR
+          "Photoshop plugin bundle still has a non-portable dependency:\n"
+          "  binary: ${binary_path}\n"
+          "  dependency: ${_platypus_dep}")
+      endif()
+    endif()
+  endforeach()
+endfunction()
+
+message(STATUS "Deploying Qt frameworks into ${_platypus_app_bundle}")
+execute_process(
+  COMMAND "${_platypus_macdeployqt}" "${_platypus_app_bundle}" -no-plugins -always-overwrite
+  RESULT_VARIABLE _platypus_macdeployqt_result
+)
+if(NOT _platypus_macdeployqt_result EQUAL 0)
+  message(FATAL_ERROR "macdeployqt failed with exit code ${_platypus_macdeployqt_result}")
+endif()
+
+foreach(_platypus_plugin_file IN LISTS _platypus_qt_plugin_files)
+  set(_platypus_plugin_source "${_platypus_qt_plugin_dir}/${_platypus_plugin_file}")
+  if(EXISTS "${_platypus_plugin_source}")
+    set(_platypus_plugin_destination
+        "${_platypus_app_bundle}/Contents/PlugIns/${_platypus_plugin_file}")
+    get_filename_component(_platypus_plugin_destination_dir
+                           "${_platypus_plugin_destination}" DIRECTORY)
+    file(MAKE_DIRECTORY "${_platypus_plugin_destination_dir}")
+    file(COPY "${_platypus_plugin_source}"
+         DESTINATION "${_platypus_plugin_destination_dir}")
+  endif()
+endforeach()
+
+message(STATUS "Fixing macOS app bundle dependencies in ${_platypus_app_bundle}")
+fixup_bundle("${_platypus_app_bundle}" "" "${_platypus_extra_dirs}")
+
+message(STATUS "Fixing Photoshop plugin bundle dependencies in ${_platypus_plugin_bundle}")
+file(MAKE_DIRECTORY "${_platypus_plugin_frameworks_dir}")
+file(GET_RUNTIME_DEPENDENCIES
+  MODULES "${_platypus_plugin_binary}"
+  RESOLVED_DEPENDENCIES_VAR _platypus_plugin_dependencies
+  UNRESOLVED_DEPENDENCIES_VAR _platypus_unresolved_plugin_dependencies
+  DIRECTORIES ${_platypus_extra_dirs}
+)
+if(_platypus_unresolved_plugin_dependencies)
+  list(JOIN _platypus_unresolved_plugin_dependencies "\n  " _platypus_unresolved)
+  message(FATAL_ERROR
+    "Failed to resolve Photoshop plugin runtime dependencies:\n  ${_platypus_unresolved}")
+endif()
+
+set(_platypus_plugin_fixed_binaries "${_platypus_plugin_binary}")
+foreach(_platypus_dependency IN LISTS _platypus_plugin_dependencies)
+  _platypus_normalize_dependency("${_platypus_dependency}" _platypus_dependency_real)
+  _platypus_is_system_dependency("${_platypus_dependency_real}" _platypus_is_system)
+  if(_platypus_is_system)
+    continue()
+  endif()
+
+  if("${_platypus_dependency_real}" MATCHES "^(.*\\.framework)/(.*)$")
+    set(_platypus_framework_root "${CMAKE_MATCH_1}")
+    set(_platypus_framework_binary_rel "${CMAKE_MATCH_2}")
+    get_filename_component(_platypus_framework_name "${_platypus_framework_root}" NAME)
+    set(_platypus_framework_dest_root
+        "${_platypus_plugin_frameworks_dir}/${_platypus_framework_name}")
+    if(NOT EXISTS "${_platypus_framework_dest_root}")
+      file(COPY "${_platypus_framework_root}"
+           DESTINATION "${_platypus_plugin_frameworks_dir}")
+    endif()
+    set(_platypus_dependency_dest
+        "${_platypus_framework_dest_root}/${_platypus_framework_binary_rel}")
+  else()
+    get_filename_component(_platypus_dependency_name "${_platypus_dependency_real}" NAME)
+    set(_platypus_dependency_dest
+        "${_platypus_plugin_frameworks_dir}/${_platypus_dependency_name}")
+    if(NOT EXISTS "${_platypus_dependency_dest}")
+      file(COPY "${_platypus_dependency_real}"
+           DESTINATION "${_platypus_plugin_frameworks_dir}")
+    endif()
+  endif()
+
+  if(NOT EXISTS "${_platypus_dependency_dest}")
+    message(FATAL_ERROR
+      "Expected copied Photoshop dependency is missing: ${_platypus_dependency_dest}")
+  endif()
+  list(APPEND _platypus_plugin_fixed_binaries "${_platypus_dependency_dest}")
+endforeach()
+
+list(REMOVE_DUPLICATES _platypus_plugin_fixed_binaries)
+foreach(_platypus_binary IN LISTS _platypus_plugin_fixed_binaries)
+  _platypus_rewrite_binary("${_platypus_binary}")
+endforeach()
+
+verify_app("${_platypus_app_bundle}")
+foreach(_platypus_binary IN LISTS _platypus_plugin_fixed_binaries)
+  _platypus_verify_bundle_binary("${_platypus_binary}")
+endforeach()

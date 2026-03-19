@@ -1,0 +1,11 @@
+Platypus Photoshop Installation
+
+1. Quit Adobe Photoshop before installing or updating Platypus.
+2. Open your Photoshop DMG and drag the entire versioned "Platypus" folder into Photoshop's "Plug-ins" directory.
+3. Keep "Platypus.app" and "Platypus.plugin" together in that folder. The plugin launches the companion app beside it.
+4. Reopen Photoshop and look for the Platypus filter in the Filter menu.
+
+Typical macOS location:
+/Applications/Adobe Photoshop [version]/Plug-ins/
+
+If you install into a shared Creative Cloud Plug-ins location instead, keep the versioned Platypus folder intact there as well.

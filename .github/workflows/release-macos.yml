@@ -96,11 +96,15 @@ jobs:
             cmake_arch: arm64
             dmg_name: Platypus-macos-arm64.dmg
             checksum_name: Platypus-macos-arm64.sha256
+            photoshop_dmg_name: Platypus-photoshop-macos-arm64.dmg
+            photoshop_checksum_name: Platypus-photoshop-macos-arm64.sha256
           - arch: x86_64
             runner: macos-15-intel
             cmake_arch: x86_64
             dmg_name: Platypus-macos-x86_64.dmg
             checksum_name: Platypus-macos-x86_64.sha256
+            photoshop_dmg_name: Platypus-photoshop-macos-x86_64.dmg
+            photoshop_checksum_name: Platypus-photoshop-macos-x86_64.sha256
 
     steps:
       - name: Checkout code
@@ -115,7 +119,7 @@ jobs:
           brew install ninja qt opencv
           echo "$(brew --prefix qt)/bin" >> "$GITHUB_PATH"
 
-      - name: Configure CMake
+      - name: Configure app CMake
         shell: bash
         run: |
           set -euo pipefail
@@ -161,6 +165,60 @@ jobs:
           echo "CHECKSUM_PATH=${RELEASE_DIR}/${{ matrix.checksum_name }}" >> "$GITHUB_ENV"
           echo "VERIFY_DIR=${VERIFY_DIR}" >> "$GITHUB_ENV"
 
+      - name: Configure Photoshop CMake
+        shell: bash
+        run: |
+          set -euo pipefail
+          QT_PREFIX="$(brew --prefix qt)"
+          OPENCV_PREFIX="$(brew --prefix opencv)"
+          cmake -B build-photoshop -S . -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_PHOTOSHOP_PLUGIN=ON \
+            -DBUILD_TESTING=OFF \
+            -DCMAKE_OSX_ARCHITECTURES="${{ matrix.cmake_arch }}" \
+            -DPLATYPUS_PACKAGE_VERSION_OVERRIDE="${{ needs.prepare.outputs.package_version }}" \
+            -DCMAKE_PREFIX_PATH="${QT_PREFIX};${OPENCV_PREFIX}" \
+            -DOpenCV_DIR="${OPENCV_PREFIX}/lib/cmake/opencv4"
+
+      - name: Build Photoshop release payload
+        shell: bash
+        run: cmake --build build-photoshop --config Release --target stage_photoshop_release
+
+      - name: Set Photoshop release paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          PHOTOSHOP_RELEASE_DIR="${GITHUB_WORKSPACE}/build/release/${{ matrix.arch }}"
+          PHOTOSHOP_VERIFY_DIR="${GITHUB_WORKSPACE}/build/mac-photoshop-verification/${{ matrix.arch }}"
+          PHOTOSHOP_PAYLOAD_DIR="${GITHUB_WORKSPACE}/build-photoshop/photoshop-release/photoshop/Platypus v${{ needs.prepare.outputs.package_version }}"
+          rm -rf "${PHOTOSHOP_VERIFY_DIR}"
+          mkdir -p "${PHOTOSHOP_VERIFY_DIR}"
+          echo "PHOTOSHOP_PAYLOAD_DIR=${PHOTOSHOP_PAYLOAD_DIR}" >> "$GITHUB_ENV"
+          echo "PHOTOSHOP_APP_PATH=${PHOTOSHOP_PAYLOAD_DIR}/Platypus.app" >> "$GITHUB_ENV"
+          echo "PHOTOSHOP_PLUGIN_PATH=${PHOTOSHOP_PAYLOAD_DIR}/Platypus.plugin" >> "$GITHUB_ENV"
+          echo "PHOTOSHOP_DMG_PATH=${PHOTOSHOP_RELEASE_DIR}/${{ matrix.photoshop_dmg_name }}" >> "$GITHUB_ENV"
+          echo "PHOTOSHOP_CHECKSUM_PATH=${PHOTOSHOP_RELEASE_DIR}/${{ matrix.photoshop_checksum_name }}" >> "$GITHUB_ENV"
+          echo "PHOTOSHOP_VERIFY_DIR=${PHOTOSHOP_VERIFY_DIR}" >> "$GITHUB_ENV"
+
+      - name: Verify Photoshop payload architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          PS_APP_BIN="${PHOTOSHOP_APP_PATH}/Contents/MacOS/Platypus"
+          PS_PLUGIN_BIN="${PHOTOSHOP_PLUGIN_PATH}/Contents/MacOS/Platypus"
+          PS_APP_ARCHS="$(lipo -archs "$PS_APP_BIN")"
+          PS_PLUGIN_ARCHS="$(lipo -archs "$PS_PLUGIN_BIN")"
+          echo "Photoshop app architectures: $PS_APP_ARCHS"
+          echo "Photoshop plugin architectures: $PS_PLUGIN_ARCHS"
+          [[ "$PS_APP_ARCHS" == *"${{ matrix.cmake_arch }}"* ]] || {
+            echo "Photoshop companion app is missing expected architecture ${{ matrix.cmake_arch }}" >&2
+            exit 1
+          }
+          [[ "$PS_PLUGIN_ARCHS" == *"${{ matrix.cmake_arch }}"* ]] || {
+            echo "Photoshop plugin is missing expected architecture ${{ matrix.cmake_arch }}" >&2
+            exit 1
+          }
+
       - name: Import Apple signing certificate
         shell: bash
         env:
@@ -202,6 +260,22 @@ jobs:
             --identity "${{ vars.APPLE_SIGNING_IDENTITY }}" \
             --skip-deploy
 
+      - name: Sign Photoshop companion app
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/mac_sign_bundle.sh \
+            --bundle "${PHOTOSHOP_APP_PATH}" \
+            --identity "${{ vars.APPLE_SIGNING_IDENTITY }}"
+
+      - name: Sign Photoshop plugin bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/mac_sign_bundle.sh \
+            --bundle "${PHOTOSHOP_PLUGIN_PATH}" \
+            --identity "${{ vars.APPLE_SIGNING_IDENTITY }}"
+
       - name: Verify app bundle
         shell: bash
         run: |
@@ -210,6 +284,15 @@ jobs:
             --phase pre-notarize \
             --app "${APP_PATH}" \
             --report-dir "${VERIFY_DIR}/pre-notarize"
+
+      - name: Verify Photoshop payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/mac_verify_photoshop_release.sh \
+            --phase pre-notarize \
+            --payload-dir "${PHOTOSHOP_PAYLOAD_DIR}" \
+            --report-dir "${PHOTOSHOP_VERIFY_DIR}/pre-notarize"
 
       - name: Create signed DMG
         shell: bash
@@ -221,11 +304,31 @@ jobs:
             --identity "${{ vars.APPLE_SIGNING_IDENTITY }}" \
             --volname "Platypus"
 
+      - name: Create signed Photoshop DMG
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/mac_package_dir_dmg.sh \
+            --source-dir "${PHOTOSHOP_PAYLOAD_DIR}" \
+            --dmg "${PHOTOSHOP_DMG_PATH}" \
+            --identity "${{ vars.APPLE_SIGNING_IDENTITY }}" \
+            --volname "Platypus Photoshop"
+
       - name: Notarize DMG
         shell: bash
         run: |
           set -euo pipefail
           xcrun notarytool submit "${DMG_PATH}" \
+            --key "$APPSTORE_CONNECT_API_KEY_PATH" \
+            --key-id "${{ secrets.APPSTORE_CONNECT_API_KEY_ID }}" \
+            --issuer "${{ secrets.APPSTORE_CONNECT_API_ISSUER_ID }}" \
+            --wait
+
+      - name: Notarize Photoshop DMG
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun notarytool submit "${PHOTOSHOP_DMG_PATH}" \
             --key "$APPSTORE_CONNECT_API_KEY_PATH" \
             --key-id "${{ secrets.APPSTORE_CONNECT_API_KEY_ID }}" \
             --issuer "${{ secrets.APPSTORE_CONNECT_API_ISSUER_ID }}" \
@@ -237,6 +340,12 @@ jobs:
           set -euo pipefail
           xcrun stapler staple "${DMG_PATH}"
 
+      - name: Staple Photoshop DMG
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun stapler staple "${PHOTOSHOP_DMG_PATH}"
+
       - name: Verify final release artifacts
         shell: bash
         run: |
@@ -247,11 +356,27 @@ jobs:
             --dmg "${DMG_PATH}" \
             --report-dir "${VERIFY_DIR}/post-staple"
 
+      - name: Verify final Photoshop release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/mac_verify_photoshop_release.sh \
+            --phase post-staple \
+            --payload-dir "${PHOTOSHOP_PAYLOAD_DIR}" \
+            --dmg "${PHOTOSHOP_DMG_PATH}" \
+            --report-dir "${PHOTOSHOP_VERIFY_DIR}/post-staple"
+
       - name: Generate checksum
         shell: bash
         run: |
           set -euo pipefail
           shasum -a 256 "${DMG_PATH}" > "${CHECKSUM_PATH}"
+
+      - name: Generate Photoshop checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          shasum -a 256 "${PHOTOSHOP_DMG_PATH}" > "${PHOTOSHOP_CHECKSUM_PATH}"
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
@@ -261,6 +386,9 @@ jobs:
             build/release/${{ matrix.arch }}/${{ matrix.dmg_name }}
             build/release/${{ matrix.arch }}/${{ matrix.checksum_name }}
             build/mac-verification/${{ matrix.arch }}
+            build/release/${{ matrix.arch }}/${{ matrix.photoshop_dmg_name }}
+            build/release/${{ matrix.arch }}/${{ matrix.photoshop_checksum_name }}
+            build/mac-photoshop-verification/${{ matrix.arch }}
 
       - name: Cleanup temporary keychain
         if: always()

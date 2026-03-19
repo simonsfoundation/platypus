@@ -2,7 +2,7 @@
 
 #ifdef __PIMac__
 	#include <Carbon.r>
-	#include "PIGeneral.r"
+	#include "PIGeneral.h"
 	#include "PIUtilities.r"
 #elif defined(__PIWin__)
 	#define Rez

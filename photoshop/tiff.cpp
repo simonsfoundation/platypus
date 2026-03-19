@@ -1,5 +1,5 @@
 #include "tiff.h"
-#include <libtiff/tiffio.h>
+#include <tiffio.h>
 
 static void s_errorHandler(const char*, const char*, va_list)
 {

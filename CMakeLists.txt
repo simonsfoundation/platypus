@@ -6,6 +6,7 @@ LANGUAGES CXX)
 
 include(CTest)
 include(GNUInstallDirs)
+include(FetchContent)
 
 # Enable automatic processing of Qt's MOC, UIC, and RCC tools
 set(CMAKE_CXX_STANDARD 17)
@@ -19,6 +20,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Configuration Options
 option(BUILD_PHOTOSHOP_PLUGIN "Build the Photoshop plugin" OFF)
 option(BUILD_APPLE_APP "Build the Apple App instead of an executable" OFF)
+set(PHOTOSHOP_PLUGIN_INSTALL_DIR "" CACHE PATH
+    "Optional Photoshop Plug-ins directory to install Platypus into")
 set(PLATYPUS_OPENCV_COMPONENTS core imgproc imgcodecs flann)
 option(OpenCV_DIR "Path to OpenCV if not found automatically" "")
 set(PLATYPUS_PACKAGE_VERSION_OVERRIDE "" CACHE STRING
@@ -59,10 +62,25 @@ if(NOT OpenCV_FOUND)
         "    Windows: use vcpkg (see readme.md)\n")
 endif()
 
+if (APPLE AND BUILD_PHOTOSHOP_PLUGIN)
+  enable_language(OBJC)
+endif()
+
+if (BUILD_PHOTOSHOP_PLUGIN)
+  find_package(TIFF REQUIRED)
+endif()
+
 set(PLATYPUS_USER_GUIDE_SOURCE
     "${CMAKE_CURRENT_SOURCE_DIR}/installer/payload/files/user_guide.pdf")
+set(PLATYPUS_PHOTOSHOP_INSTALL_GUIDE_SOURCE
+    "${CMAKE_CURRENT_SOURCE_DIR}/installer/payload/files/install_photoshop_plugin.txt")
 set(PLATYPUS_APP_ICON_SOURCE
     "${CMAKE_CURRENT_SOURCE_DIR}/mac/AppIcon.icns")
+
+if (BUILD_PHOTOSHOP_PLUGIN)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ResolvePhotoshopSDK.cmake")
+  resolve_photoshop_sdk(PLATYPUS_PHOTOSHOP_SDK_ROOT)
+endif()
 
 add_library(platypus STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/platypus/CradleFunctions.cpp
@@ -136,8 +154,30 @@ target_include_directories(platypus_gui PUBLIC
 target_link_libraries(platypus_gui PUBLIC
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent ${OpenCV_LIBS} platypus)
 
+set(PLATYPUS_BUILD_MAC_APP OFF)
+if (APPLE AND (BUILD_APPLE_APP OR BUILD_PHOTOSHOP_PLUGIN))
+  set(PLATYPUS_BUILD_MAC_APP ON)
+endif()
+
+if (BUILD_PHOTOSHOP_PLUGIN)
+  set(PLATYPUS_APP_OUTPUT_NAME "Platypus")
+else()
+  set(PLATYPUS_APP_OUTPUT_NAME "PlatypusGui")
+endif()
+
+if (BUILD_PHOTOSHOP_PLUGIN)
+  if (PHOTOSHOP_PLUGIN_INSTALL_DIR)
+    set(PLATYPUS_APP_INSTALL_ROOT
+        "${PHOTOSHOP_PLUGIN_INSTALL_DIR}/Platypus v${PLATYPUS_PACKAGE_VERSION}")
+  else()
+    set(PLATYPUS_APP_INSTALL_ROOT "photoshop/Platypus v${PLATYPUS_PACKAGE_VERSION}")
+  endif()
+else()
+  set(PLATYPUS_APP_INSTALL_ROOT ".")
+endif()
+
 # Add the executable
-if (BUILD_APPLE_APP)
+if (PLATYPUS_BUILD_MAC_APP)
   set(MACOSX_BUNDLE TRUE)
   add_executable(PlatypusGui MACOSX_BUNDLE src/main.cpp)
   target_sources(PlatypusGui PRIVATE
@@ -150,7 +190,8 @@ if (BUILD_APPLE_APP)
       MACOSX_PACKAGE_LOCATION "Resources")
   set_target_properties(PlatypusGui PROPERTIES
     MACOSX_BUNDLE TRUE
-    MACOSX_BUNDLE_BUNDLE_NAME "platypus"
+    OUTPUT_NAME "${PLATYPUS_APP_OUTPUT_NAME}"
+    MACOSX_BUNDLE_BUNDLE_NAME "${PLATYPUS_APP_OUTPUT_NAME}"
     MACOSX_BUNDLE_GUI_IDENTIFIER "com.simonsfoundation.platypus"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PLATYPUS_PACKAGE_VERSION}"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${PLATYPUS_PACKAGE_VERSION}"
@@ -164,8 +205,12 @@ elseif(WIN32)
   add_executable(PlatypusGui WIN32 src/main.cpp)
   target_sources(PlatypusGui PRIVATE
       "${CMAKE_CURRENT_SOURCE_DIR}/platypus.rc")
+  set_target_properties(PlatypusGui PROPERTIES
+      OUTPUT_NAME "${PLATYPUS_APP_OUTPUT_NAME}")
 else()
   add_executable(PlatypusGui src/main.cpp)
+  set_target_properties(PlatypusGui PROPERTIES
+      OUTPUT_NAME "${PLATYPUS_APP_OUTPUT_NAME}")
 endif()
 
 include(CheckIPOSupported)
@@ -183,13 +228,13 @@ target_compile_definitions(PlatypusGui PRIVATE
     PLATYPUS_APP_VERSION="${PLATYPUS_PACKAGE_VERSION}")
 
 install(TARGETS PlatypusGui
-    BUNDLE DESTINATION .
-    RUNTIME DESTINATION .)
+    BUNDLE DESTINATION "${PLATYPUS_APP_INSTALL_ROOT}"
+    RUNTIME DESTINATION "${PLATYPUS_APP_INSTALL_ROOT}")
 
-if (NOT BUILD_APPLE_APP)
+if (NOT PLATYPUS_BUILD_MAC_APP)
   install(FILES
       "${CMAKE_CURRENT_BINARY_DIR}/user_guide.pdf"
-      DESTINATION .)
+      DESTINATION "${PLATYPUS_APP_INSTALL_ROOT}")
 endif()
 
 # Only find and link xcb on Linux
@@ -198,12 +243,12 @@ if(UNIX AND NOT APPLE)
   target_link_libraries(PlatypusGui PRIVATE xcb)
 endif()
 
-if (NOT BUILD_APPLE_APP)
+if (NOT PLATYPUS_BUILD_MAC_APP)
   configure_file("${PLATYPUS_USER_GUIDE_SOURCE}"
                  "${CMAKE_CURRENT_BINARY_DIR}/user_guide.pdf" COPYONLY)
 endif()
 
-if (APPLE AND BUILD_APPLE_APP)
+if (APPLE AND PLATYPUS_BUILD_MAC_APP)
   if (NOT MACDEPLOYQT_EXECUTABLE)
     find_program(MACDEPLOYQT_EXECUTABLE
         NAMES macdeployqt
@@ -233,8 +278,10 @@ if (APPLE AND BUILD_APPLE_APP)
   endif()
 
   list(REMOVE_DUPLICATES PLATYPUS_BUNDLE_FIXUP_DIRS)
+  get_filename_component(_platypus_qt_bin_dir
+                         "${MACDEPLOYQT_EXECUTABLE}" DIRECTORY)
   get_filename_component(_platypus_qt_host_prefix
-                         "${MACDEPLOYQT_EXECUTABLE}/../../../.." ABSOLUTE)
+                         "${_platypus_qt_bin_dir}/.." ABSOLUTE)
   if (EXISTS "${_platypus_qt_host_prefix}/lib")
     list(APPEND PLATYPUS_BUNDLE_FIXUP_DIRS "${_platypus_qt_host_prefix}/lib")
   endif()
@@ -369,19 +416,61 @@ endif()
 
 
 if (BUILD_PHOTOSHOP_PLUGIN)
-# Set up Photoshop SDK
-set(PHOTOSHOP_SDK_DIR "/path/to/photoshop/sdk" CACHE PATH "Path to the Adobe Photoshop SDK")
-if (NOT EXISTS "${PHOTOSHOP_SDK_DIR}")
-    message(FATAL_ERROR "Please set PHOTOSHOP_SDK_DIR to the path of the Adobe Photoshop SDK.")
+set(PLATYPUS_PHOTOSHOP_PACKAGE_ROOT "photoshop/Platypus v${PLATYPUS_PACKAGE_VERSION}")
+if (PHOTOSHOP_PLUGIN_INSTALL_DIR)
+  set(PLATYPUS_PHOTOSHOP_INSTALL_ROOT
+      "${PHOTOSHOP_PLUGIN_INSTALL_DIR}/Platypus v${PLATYPUS_PACKAGE_VERSION}")
+else()
+  set(PLATYPUS_PHOTOSHOP_INSTALL_ROOT "${PLATYPUS_PHOTOSHOP_PACKAGE_ROOT}")
 endif()
+set(PLATYPUS_PHOTOSHOP_RELEASE_STAGE_DIR
+    "${CMAKE_CURRENT_BINARY_DIR}/photoshop-release/${PLATYPUS_PHOTOSHOP_PACKAGE_ROOT}")
+
+set(PLATYPUS_PHOTOSHOP_API_DIR
+    "${PLATYPUS_PHOTOSHOP_SDK_ROOT}/pluginsdk/photoshopapi")
+set(PLATYPUS_PHOTOSHOP_COMMON_DIR
+    "${PLATYPUS_PHOTOSHOP_SDK_ROOT}/pluginsdk/samplecode/common")
 
 # Add Photoshop plugin source files
 set(PLUGIN_SOURCES
     photoshop/driver.cpp
     photoshop/tiff.cpp
     photoshop/tiff.h
-    # Add other necessary files
 )
+
+if (APPLE)
+  set(PLATYPUS_PIPL_CODE_MAC_ARM64_LINE "")
+  set(PLATYPUS_PIPL_CODE_MAC_INTEL64_LINE "")
+  foreach(_platypus_arch IN LISTS CMAKE_OSX_ARCHITECTURES)
+    if (_platypus_arch STREQUAL "arm64")
+      set(PLATYPUS_PIPL_CODE_MAC_ARM64_LINE "\"CodeMacARM64\": \"PluginMain\",")
+    elseif (_platypus_arch STREQUAL "x86_64")
+      set(PLATYPUS_PIPL_CODE_MAC_INTEL64_LINE "\"CodeMacIntel64\": \"PluginMain\",")
+    endif()
+  endforeach()
+  if (NOT PLATYPUS_PIPL_CODE_MAC_ARM64_LINE
+      AND NOT PLATYPUS_PIPL_CODE_MAC_INTEL64_LINE)
+    if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)$")
+      set(PLATYPUS_PIPL_CODE_MAC_ARM64_LINE "\"CodeMacARM64\": \"PluginMain\",")
+    else()
+      set(PLATYPUS_PIPL_CODE_MAC_INTEL64_LINE "\"CodeMacIntel64\": \"PluginMain\",")
+    endif()
+  endif()
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/photoshop")
+  configure_file(
+      "${CMAKE_CURRENT_SOURCE_DIR}/photoshop/PiPLs.json.in"
+      "${CMAKE_CURRENT_BINARY_DIR}/photoshop/PiPLs.json"
+      @ONLY)
+  list(APPEND PLUGIN_SOURCES
+      photoshop/messageBox.m
+      "${CMAKE_CURRENT_BINARY_DIR}/photoshop/PiPLs.json")
+  set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/photoshop/PiPLs.json" PROPERTIES
+      MACOSX_PACKAGE_LOCATION "Resources")
+elseif(WIN32)
+  list(APPEND PLUGIN_SOURCES
+      photoshop/messageBox.cpp
+      photoshop/Platypus.rc)
+endif()
 
 # Define the plugin target
 add_library(PlatypusPlugin MODULE ${PLUGIN_SOURCES})
@@ -392,74 +481,47 @@ set_target_properties(PlatypusPlugin PROPERTIES
     PREFIX "" # Remove 'lib' prefix
 )
 
-# For Windows, set the extension to .8bf
-if (WIN32)
+if (APPLE)
+    set_target_properties(PlatypusPlugin PROPERTIES
+        BUNDLE TRUE
+        BUNDLE_EXTENSION "plugin"
+        MACOSX_BUNDLE_INFO_PLIST
+            "${CMAKE_CURRENT_SOURCE_DIR}/photoshop/Info.plist")
+else()
     set_target_properties(PlatypusPlugin PROPERTIES SUFFIX ".8bf")
 endif()
 
 # Include directories for the Photoshop SDK
 target_include_directories(PlatypusPlugin PRIVATE
-    ${PHOTOSHOP_SDK_DIR}/interfaces
-    ${PHOTOSHOP_SDK_DIR}/samples/common
-    ${PHOTOSHOP_SDK_DIR}/samples/win
-    ${PHOTOSHOP_SDK_DIR}/samples/mac
-    # Add other necessary include directories
+    "${PLATYPUS_PHOTOSHOP_API_DIR}/photoshop"
+    "${PLATYPUS_PHOTOSHOP_API_DIR}/pica_sp"
+    "${PLATYPUS_PHOTOSHOP_API_DIR}/resources"
+    "${PLATYPUS_PHOTOSHOP_COMMON_DIR}/includes"
+    "${PLATYPUS_PHOTOSHOP_COMMON_DIR}/resources"
 )
 
 if (APPLE)
-    # Paths to resource files
-    set(RESOURCE_FILE "${CMAKE_CURRENT_SOURCE_DIR}/photoshop/platypus.r")
-    set(RESOURCE_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/platypus.rsrc")
-
-    # Compile the resource file
-    add_custom_command(
-        OUTPUT "${RESOURCE_OUTPUT}"
-        COMMAND Rez -d SystemSevenOrLater=1 -useDF "${RESOURCE_FILE}" -o "${RESOURCE_OUTPUT}"
-        DEPENDS "${RESOURCE_FILE}"
-        COMMENT "Compiling resource file ${RESOURCE_FILE}"
-    )
-
-    # Custom target for resource compilation
-    add_custom_target(PlatypusResource ALL DEPENDS "${RESOURCE_OUTPUT}")
-
-    # Ensure the plugin depends on the resource
-    add_dependencies(PlatypusPlugin PlatypusResource)
-
-    # Link the resource into the plugin
-    set_target_properties(PlatypusPlugin PROPERTIES
-        LINK_FLAGS "-sectcreate __TEXT __rsrc \"${RESOURCE_OUTPUT}\""
-    )
-
-    # Optionally, install the resource file into the plugin bundle
-    install(FILES "${RESOURCE_OUTPUT}"
-        DESTINATION "path/to/photoshop/plugins/Platypus.plugin/Contents/Resources"
-    )
-endif()
-
-# Platform-specific include directories
-if (WIN32)
-    target_include_directories(PlatypusPlugin PRIVATE
-        ${PHOTOSHOP_SDK_DIR}/samples/win
-    )
-else()
-    target_include_directories(PlatypusPlugin PRIVATE
-        ${PHOTOSHOP_SDK_DIR}/samples/mac
-    )
 endif()
 
 # Define necessary preprocessor macros
 target_compile_definitions(PlatypusPlugin PRIVATE
-    # Add necessary definitions
+    PLATYPUS_APP_VERSION="${PLATYPUS_PACKAGE_VERSION}"
 )
 
 # Link platform-specific libraries
 if (WIN32)
     target_link_libraries(PlatypusPlugin PRIVATE
-        # Add Windows-specific libraries
+        platypus
+        platypus_gui
+        TIFF::TIFF
     )
 else()
     target_link_libraries(PlatypusPlugin PRIVATE
+        platypus
+        platypus_gui
+        TIFF::TIFF
         "-framework CoreFoundation"
+        "-framework Cocoa"
         # Add other macOS-specific libraries
     )
 endif()
@@ -475,9 +537,73 @@ else()
     )
 endif()
 
-# Install the plugin
-install(TARGETS PlatypusPlugin
-    LIBRARY DESTINATION "path/to/photoshop/plugins" # Replace with actual path
-    RUNTIME DESTINATION "path/to/photoshop/plugins" # For Windows
-)
+if (APPLE)
+    install(TARGETS PlatypusPlugin
+        LIBRARY DESTINATION "${PLATYPUS_PHOTOSHOP_INSTALL_ROOT}")
+else()
+    install(TARGETS PlatypusPlugin
+        RUNTIME DESTINATION "${PLATYPUS_PHOTOSHOP_INSTALL_ROOT}"
+        LIBRARY DESTINATION "${PLATYPUS_PHOTOSHOP_INSTALL_ROOT}")
+endif()
+
+set(PLATYPUS_STAGE_DIR
+    "${CMAKE_CURRENT_BINARY_DIR}/photoshop-stage/${PLATYPUS_PHOTOSHOP_PACKAGE_ROOT}")
+if (APPLE)
+    add_custom_target(stage_photoshop_plugin
+        COMMAND ${CMAKE_COMMAND} -E remove_directory "${PLATYPUS_STAGE_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${PLATYPUS_STAGE_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "$<TARGET_BUNDLE_DIR:PlatypusPlugin>"
+            "${PLATYPUS_STAGE_DIR}/Platypus.plugin"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "$<TARGET_BUNDLE_DIR:PlatypusGui>"
+            "${PLATYPUS_STAGE_DIR}/Platypus.app"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${PLATYPUS_USER_GUIDE_SOURCE}"
+            "${PLATYPUS_STAGE_DIR}/User Guide.pdf"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${PLATYPUS_PHOTOSHOP_INSTALL_GUIDE_SOURCE}"
+            "${PLATYPUS_STAGE_DIR}/INSTALL Photoshop Plugin.txt"
+        DEPENDS PlatypusPlugin PlatypusGui
+        COMMENT "Staging Platypus Photoshop bundle")
+
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PlatypusStagePhotoshopRelease.cmake.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/PlatypusStagePhotoshopRelease.cmake"
+        @ONLY)
+    add_custom_target(stage_photoshop_release
+        COMMAND ${CMAKE_COMMAND} -E remove_directory "${PLATYPUS_PHOTOSHOP_RELEASE_STAGE_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${PLATYPUS_PHOTOSHOP_RELEASE_STAGE_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "$<TARGET_BUNDLE_DIR:PlatypusPlugin>"
+            "${PLATYPUS_PHOTOSHOP_RELEASE_STAGE_DIR}/Platypus.plugin"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "$<TARGET_BUNDLE_DIR:PlatypusGui>"
+            "${PLATYPUS_PHOTOSHOP_RELEASE_STAGE_DIR}/Platypus.app"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${PLATYPUS_USER_GUIDE_SOURCE}"
+            "${PLATYPUS_PHOTOSHOP_RELEASE_STAGE_DIR}/User Guide.pdf"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${PLATYPUS_PHOTOSHOP_INSTALL_GUIDE_SOURCE}"
+            "${PLATYPUS_PHOTOSHOP_RELEASE_STAGE_DIR}/INSTALL Photoshop Plugin.txt"
+        COMMAND ${CMAKE_COMMAND} -P "${CMAKE_CURRENT_BINARY_DIR}/PlatypusStagePhotoshopRelease.cmake"
+        DEPENDS PlatypusPlugin PlatypusGui
+        COMMENT "Staging release-ready Platypus Photoshop bundle")
+else()
+    add_custom_target(stage_photoshop_plugin
+        COMMAND ${CMAKE_COMMAND} -E remove_directory "${PLATYPUS_STAGE_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${PLATYPUS_STAGE_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:PlatypusPlugin>"
+            "${PLATYPUS_STAGE_DIR}/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:PlatypusGui>"
+            "${PLATYPUS_STAGE_DIR}/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${PLATYPUS_USER_GUIDE_SOURCE}"
+            "${PLATYPUS_STAGE_DIR}/User Guide.pdf"
+        DEPENDS PlatypusPlugin PlatypusGui
+        COMMENT "Staging Platypus Photoshop plugin")
+    add_custom_target(stage_photoshop_release DEPENDS stage_photoshop_plugin)
+endif()
 endif()

@@ -37,7 +37,7 @@ static const char *kProductCopyright = "Platypus (c) 2015 Duke University";
 
 
 // suites
-static SPBasicSuite *s_SPBasic = NULL;
+SPBasicSuite *sSPBasic = NULL;
 static FilterRecord *s_filterRecord;
 static const PSChannelPortsSuite1 *s_chanPorts;
 
@@ -217,7 +217,7 @@ static std::string getAppPath(SPPluginRef pluginRef)
 	SPPlatformFileSpecification pluginPath = { 0 };
 	try
 	{
-		SuiteHandler<SPPluginsSuite> piSuite(s_SPBasic, kSPPluginsSuite, kSPPluginsSuiteVersion4);
+		SuiteHandler<SPPluginsSuite> piSuite(sSPBasic, kSPPluginsSuite, kSPPluginsSuiteVersion4);
 		piSuite->GetPluginFileSpecification(pluginRef, &pluginPath);
 	}
 	catch (...)
@@ -498,13 +498,13 @@ DLLExport MACPASCAL void PluginMain (const short selector,
 	const PlatformData *platformData = NULL;
 	if (selector == filterSelectorAbout)
 	{
-		s_SPBasic = ((const AboutRecord *)filterRecord)->sSPBasic;
+		sSPBasic = ((const AboutRecord *)filterRecord)->sSPBasic;
 		pluginRef = (SPPluginRef)((const AboutRecord *)filterRecord)->plugInRef;
 		platformData = (const PlatformData *)((const AboutRecord *)filterRecord)->platformData;
 	}
 	else if (selector == filterSelectorStart)
 	{
-		s_SPBasic = filterRecord->sSPBasic;
+		sSPBasic = filterRecord->sSPBasic;
 		pluginRef = (SPPluginRef)filterRecord->plugInRef;
 		platformData = (const PlatformData *)filterRecord->platformData;
  	}
@@ -529,7 +529,7 @@ DLLExport MACPASCAL void PluginMain (const short selector,
 	{
 		try
 		{
-			SuiteHandler<PSChannelPortsSuite1> chanPorts(s_SPBasic, kPSChannelPortsSuite, kPSChannelPortsSuiteVersion2);
+			SuiteHandler<PSChannelPortsSuite1> chanPorts(sSPBasic, kPSChannelPortsSuite, kPSChannelPortsSuiteVersion2);
 			s_chanPorts = chanPorts.get();
 		}
 		catch (...)

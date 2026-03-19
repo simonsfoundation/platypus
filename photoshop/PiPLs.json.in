@@ -1,0 +1,82 @@
+{
+  "PiPLs": [
+    {
+      "Kind": "Filter",
+      "Name": "Platypus",
+      "Category": "Platypus",
+      "Version": 4,
+      "SubVersion": 0,
+      "ComponentVersionShortNum": 1,
+      "ComponentVersionMinorRevNum": 0,
+      "ComponentVersionDotRevNum": 0,
+      "ComponentName": "Platypus",
+      @PLATYPUS_PIPL_CODE_MAC_ARM64_LINE@
+      @PLATYPUS_PIPL_CODE_MAC_INTEL64_LINE@
+      "CodeEntryPointWin64": "PluginMain",
+      "EnableInfo": "in (PSHOP_ImageMode, GrayScaleMode, RGBMode)",
+      "HasTerminology": {
+        "ClassID": "Plat",
+        "EventID": "Plat",
+        "ScopeString": "E28E4093-B898-40CF-9F32-46229DCF7741"
+      },
+      "FilterCaseInfo": [
+        {
+          "InputHandling": "InWhiteMat",
+          "OutputHandling": "OutWhiteMat",
+          "WriteOutsideSelection": false,
+          "FiltersLayerMasks": true,
+          "WorksWithBlankData": false,
+          "DontCopySourceToDestination": false
+        },
+        {
+          "InputHandling": "InWhiteMat",
+          "OutputHandling": "OutWhiteMat",
+          "WriteOutsideSelection": false,
+          "FiltersLayerMasks": true,
+          "WorksWithBlankData": false,
+          "DontCopySourceToDestination": false
+        },
+        {
+          "InputHandling": "InWhiteMat",
+          "OutputHandling": "OutWhiteMat",
+          "WriteOutsideSelection": false,
+          "FiltersLayerMasks": true,
+          "WorksWithBlankData": false,
+          "DontCopySourceToDestination": false
+        },
+        {
+          "InputHandling": "InWhiteMat",
+          "OutputHandling": "OutWhiteMat",
+          "WriteOutsideSelection": false,
+          "FiltersLayerMasks": true,
+          "WorksWithBlankData": false,
+          "DontCopySourceToDestination": false
+        },
+        {
+          "InputHandling": "InWhiteMat",
+          "OutputHandling": "OutWhiteMat",
+          "WriteOutsideSelection": false,
+          "FiltersLayerMasks": true,
+          "WorksWithBlankData": false,
+          "DontCopySourceToDestination": false
+        },
+        {
+          "InputHandling": "InWhiteMat",
+          "OutputHandling": "OutWhiteMat",
+          "WriteOutsideSelection": false,
+          "FiltersLayerMasks": true,
+          "WorksWithBlankData": false,
+          "DontCopySourceToDestination": false
+        },
+        {
+          "InputHandling": "InWhiteMat",
+          "OutputHandling": "OutWhiteMat",
+          "WriteOutsideSelection": false,
+          "FiltersLayerMasks": true,
+          "WorksWithBlankData": false,
+          "DontCopySourceToDestination": false
+        }
+      ]
+    }
+  ]
+}

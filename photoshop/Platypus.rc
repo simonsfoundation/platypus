@@ -1,0 +1,5 @@
+#include "resource.h"
+
+#include <winres.h>
+
+JSON_PIPL JSON "PiPLs.json"

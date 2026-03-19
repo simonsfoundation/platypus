@@ -1,5 +1,11 @@
-set(_platypus_bundle_raw "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/PlatypusGui.app")
-set(_platypus_install_root_raw "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}")
+set(_platypus_bundle_name "@PLATYPUS_APP_OUTPUT_NAME@.app")
+set(_platypus_app_install_root "@PLATYPUS_APP_INSTALL_ROOT@")
+if(IS_ABSOLUTE "${_platypus_app_install_root}")
+  set(_platypus_install_root_raw "$ENV{DESTDIR}${_platypus_app_install_root}")
+else()
+  set(_platypus_install_root_raw "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/${_platypus_app_install_root}")
+endif()
+set(_platypus_bundle_raw "${_platypus_install_root_raw}/${_platypus_bundle_name}")
 set(_platypus_macdeployqt "@MACDEPLOYQT_EXECUTABLE@")
 set(_platypus_qt_plugin_dir "@PLATYPUS_QT_PLUGIN_DIR@")
 set(_platypus_qt_plugin_files "@PLATYPUS_QT_PLUGIN_FILES_JOINED@")
@@ -16,7 +22,7 @@ endif()
 
 message(STATUS "Deploying Qt frameworks into ${_platypus_bundle}")
 execute_process(
-  COMMAND "${_platypus_macdeployqt}" "PlatypusGui.app" -no-plugins -always-overwrite
+  COMMAND "${_platypus_macdeployqt}" "${_platypus_bundle_name}" -no-plugins -always-overwrite
   WORKING_DIRECTORY "${_platypus_install_root}"
   RESULT_VARIABLE _platypus_macdeployqt_result
 )
