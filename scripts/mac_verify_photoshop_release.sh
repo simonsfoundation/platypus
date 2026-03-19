@@ -117,16 +117,16 @@ check_bundle_signature_metadata() {
   local bundle_path="$1"
   local log_name="$2"
   local log_file="${REPORT_DIR}/${log_name}.log"
-  local expected_executable
-  local expected_bundle_executable
+  local expected_executable_name
+  local expected_executable_pattern
 
-  expected_executable="$(bundle_main_binary "${bundle_path}")"
-  expected_bundle_executable="Executable=${expected_executable}"
+  expected_executable_name="$(basename "$(bundle_main_binary "${bundle_path}")")"
+  expected_executable_pattern="^Executable=.*/Contents/MacOS/${expected_executable_name}$"
 
   codesign -dvv "${bundle_path}" >"${log_file}" 2>&1
   grep -q "Authority=Developer ID Application:" "${log_file}" &&
     grep -q "Runtime Version=" "${log_file}" &&
-    grep -Fq "${expected_bundle_executable}" "${log_file}"
+    grep -Eq "${expected_executable_pattern}" "${log_file}"
 }
 
 check_bundle_plist_metadata() {
@@ -248,7 +248,7 @@ check_dependency_paths() {
 check_dmg_contents() {
   local mount_dir
   mount_dir="$(mktemp -d "${TMPDIR:-/tmp}/platypus-photoshop-dmg.XXXXXX")"
-  trap 'hdiutil detach "${mount_dir}" >/dev/null 2>&1 || true; rm -rf "${mount_dir}"' RETURN
+  trap "hdiutil detach \"${mount_dir}\" >/dev/null 2>&1 || true; rm -rf \"${mount_dir}\"" RETURN
 
   hdiutil attach -readonly -nobrowse -mountpoint "${mount_dir}" "${DMG_PATH}" >/dev/null
   [[ -d "${mount_dir}/${PAYLOAD_BASENAME}" ]] &&
