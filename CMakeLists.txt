@@ -280,23 +280,55 @@ if (APPLE AND PLATYPUS_BUILD_MAC_APP)
   list(REMOVE_DUPLICATES PLATYPUS_BUNDLE_FIXUP_DIRS)
   get_filename_component(_platypus_qt_bin_dir
                          "${MACDEPLOYQT_EXECUTABLE}" DIRECTORY)
-  get_filename_component(_platypus_qt_host_prefix
+  get_filename_component(_platypus_qt_prefix
                          "${_platypus_qt_bin_dir}/.." ABSOLUTE)
-  if (EXISTS "${_platypus_qt_host_prefix}/lib")
-    list(APPEND PLATYPUS_BUNDLE_FIXUP_DIRS "${_platypus_qt_host_prefix}/lib")
-  endif()
-  if (EXISTS "${_platypus_qt_host_prefix}/opt")
-    file(GLOB _platypus_homebrew_opt_lib_dirs LIST_DIRECTORIES TRUE
-         "${_platypus_qt_host_prefix}/opt/*/lib")
-    list(APPEND PLATYPUS_BUNDLE_FIXUP_DIRS ${_platypus_homebrew_opt_lib_dirs})
-    file(GLOB _platypus_homebrew_gcc_lib_dirs LIST_DIRECTORIES TRUE
-         "${_platypus_qt_host_prefix}/opt/gcc/lib/gcc/*")
-    list(APPEND PLATYPUS_BUNDLE_FIXUP_DIRS ${_platypus_homebrew_gcc_lib_dirs})
-  endif()
+  get_filename_component(_platypus_macdeployqt_real
+                         "${MACDEPLOYQT_EXECUTABLE}" REALPATH)
+  get_filename_component(_platypus_macdeployqt_real_bin_dir
+                         "${_platypus_macdeployqt_real}" DIRECTORY)
+  get_filename_component(_platypus_qt_real_prefix
+                         "${_platypus_macdeployqt_real_bin_dir}/.." ABSOLUTE)
+
+  foreach(_platypus_qt_lib_prefix
+          IN ITEMS "${_platypus_qt_prefix}" "${_platypus_qt_real_prefix}")
+    if (EXISTS "${_platypus_qt_lib_prefix}/lib")
+      list(APPEND PLATYPUS_BUNDLE_FIXUP_DIRS "${_platypus_qt_lib_prefix}/lib")
+    endif()
+  endforeach()
+
+  set(_platypus_package_manager_prefixes "")
+  foreach(_platypus_prefix_candidate
+          IN ITEMS "${_platypus_qt_prefix}" "${_platypus_qt_real_prefix}")
+    if (EXISTS "${_platypus_prefix_candidate}/opt")
+      list(APPEND PLATYPUS_BUNDLE_FIXUP_DIRS "${_platypus_prefix_candidate}/lib")
+      list(APPEND _platypus_package_manager_prefixes
+           "${_platypus_prefix_candidate}")
+    elseif (_platypus_prefix_candidate MATCHES "^(.*)/opt/[^/]+$")
+      list(APPEND _platypus_package_manager_prefixes "${CMAKE_MATCH_1}")
+    elseif (_platypus_prefix_candidate MATCHES "^(.*)/Cellar/[^/]+/[^/]+$")
+      list(APPEND _platypus_package_manager_prefixes "${CMAKE_MATCH_1}")
+    endif()
+  endforeach()
+
+  list(REMOVE_DUPLICATES _platypus_package_manager_prefixes)
+  foreach(_platypus_package_manager_prefix IN LISTS _platypus_package_manager_prefixes)
+    if (EXISTS "${_platypus_package_manager_prefix}/opt")
+      file(GLOB _platypus_homebrew_opt_lib_dirs LIST_DIRECTORIES TRUE
+           "${_platypus_package_manager_prefix}/opt/*/lib")
+      list(APPEND PLATYPUS_BUNDLE_FIXUP_DIRS ${_platypus_homebrew_opt_lib_dirs})
+      file(GLOB _platypus_homebrew_gcc_lib_dirs LIST_DIRECTORIES TRUE
+           "${_platypus_package_manager_prefix}/opt/gcc/lib/gcc/*")
+      list(APPEND PLATYPUS_BUNDLE_FIXUP_DIRS ${_platypus_homebrew_gcc_lib_dirs})
+    endif()
+  endforeach()
   list(REMOVE_DUPLICATES PLATYPUS_BUNDLE_FIXUP_DIRS)
   list(JOIN PLATYPUS_BUNDLE_FIXUP_DIRS ";" PLATYPUS_BUNDLE_FIXUP_DIRS_JOINED)
 
-  set(PLATYPUS_QT_PLUGIN_DIR "${_platypus_qt_host_prefix}/share/qt/plugins")
+  if (EXISTS "${_platypus_qt_prefix}/share/qt/plugins")
+    set(PLATYPUS_QT_PLUGIN_DIR "${_platypus_qt_prefix}/share/qt/plugins")
+  else()
+    set(PLATYPUS_QT_PLUGIN_DIR "${_platypus_qt_real_prefix}/share/qt/plugins")
+  endif()
   set(PLATYPUS_QT_PLUGIN_FILES
       "platforms/libqcocoa.dylib"
       "imageformats/libqgif.dylib"
