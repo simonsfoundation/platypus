@@ -144,6 +144,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rm -rf build
           QT_PREFIX="$(brew --prefix qt)"
           OPENCV_PREFIX="$(brew --prefix opencv)"
           cmake -B build -S . -G Ninja \
@@ -190,6 +191,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rm -rf build-photoshop
           QT_PREFIX="$(brew --prefix qt)"
           OPENCV_PREFIX="$(brew --prefix opencv)"
           cmake -B build-photoshop -S . -G Ninja \

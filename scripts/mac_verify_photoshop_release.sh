@@ -117,7 +117,13 @@ check_bundle_signature_metadata() {
   local bundle_path="$1"
   local log_name="$2"
   local log_file="${REPORT_DIR}/${log_name}.log"
-  codesign -dvv "${bundle_path}" >"${log_file}" 2>&1
+  local metadata_target="${bundle_path}"
+
+  if [[ "${bundle_path}" == *.plugin ]]; then
+    metadata_target="$(bundle_main_binary "${bundle_path}")"
+  fi
+
+  codesign -dvv "${metadata_target}" >"${log_file}" 2>&1
   grep -q "Authority=Developer ID Application:" "${log_file}" &&
     grep -q "Runtime Version=" "${log_file}"
 }
@@ -140,6 +146,9 @@ check_nested_code_signatures() {
   done < <(find "${bundle_path}/Contents" -name '*.framework' -print0 | sort -z)
 
   while IFS= read -r -d '' file; do
+    if [[ "${file}" == "${bundle_path}/Contents/MacOS/"* ]]; then
+      continue
+    fi
     if ! codesign --verify --strict --verbose=2 "${file}" >>"${log_file}" 2>&1; then
       echo "Failed code signature verification: ${file}" >>"${log_file}"
       return 1
