@@ -341,33 +341,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          xcrun notarytool submit "${DMG_PATH}" \
-            --key "$APPSTORE_CONNECT_API_KEY_PATH" \
+          bash scripts/mac_notarize_dmg.sh \
+            --dmg "${DMG_PATH}" \
+            --api-key "$APPSTORE_CONNECT_API_KEY_PATH" \
             --key-id "${{ secrets.APPSTORE_CONNECT_API_KEY_ID }}" \
             --issuer "${{ secrets.APPSTORE_CONNECT_API_ISSUER_ID }}" \
-            --wait
+            --skip-dmg
 
       - name: Notarize Photoshop DMG
         shell: bash
         run: |
           set -euo pipefail
-          xcrun notarytool submit "${PHOTOSHOP_DMG_PATH}" \
-            --key "$APPSTORE_CONNECT_API_KEY_PATH" \
+          bash scripts/mac_notarize_dmg.sh \
+            --dmg "${PHOTOSHOP_DMG_PATH}" \
+            --api-key "$APPSTORE_CONNECT_API_KEY_PATH" \
             --key-id "${{ secrets.APPSTORE_CONNECT_API_KEY_ID }}" \
             --issuer "${{ secrets.APPSTORE_CONNECT_API_ISSUER_ID }}" \
-            --wait
-
-      - name: Staple DMG
-        shell: bash
-        run: |
-          set -euo pipefail
-          xcrun stapler staple "${DMG_PATH}"
-
-      - name: Staple Photoshop DMG
-        shell: bash
-        run: |
-          set -euo pipefail
-          xcrun stapler staple "${PHOTOSHOP_DMG_PATH}"
+            --skip-dmg
 
       - name: Verify final release artifacts
         shell: bash

@@ -117,15 +117,43 @@ check_bundle_signature_metadata() {
   local bundle_path="$1"
   local log_name="$2"
   local log_file="${REPORT_DIR}/${log_name}.log"
-  local metadata_target="${bundle_path}"
+  local expected_executable
+  local expected_bundle_executable
 
-  if [[ "${bundle_path}" == *.plugin ]]; then
-    metadata_target="$(bundle_main_binary "${bundle_path}")"
-  fi
+  expected_executable="$(bundle_main_binary "${bundle_path}")"
+  expected_bundle_executable="Executable=${expected_executable}"
 
-  codesign -dvv "${metadata_target}" >"${log_file}" 2>&1
+  codesign -dvv "${bundle_path}" >"${log_file}" 2>&1
   grep -q "Authority=Developer ID Application:" "${log_file}" &&
-    grep -q "Runtime Version=" "${log_file}"
+    grep -q "Runtime Version=" "${log_file}" &&
+    grep -Fq "${expected_bundle_executable}" "${log_file}"
+}
+
+check_bundle_plist_metadata() {
+  local bundle_path="$1"
+  local log_name="$2"
+  local log_file="${REPORT_DIR}/${log_name}.log"
+  local info_plist="${bundle_path}/Contents/Info.plist"
+  local expected_executable
+  local actual_executable
+
+  [[ -f "${info_plist}" ]] || {
+    echo "Missing Info.plist: ${info_plist}" >"${log_file}"
+    return 1
+  }
+
+  expected_executable="$(basename "$(bundle_main_binary "${bundle_path}")")"
+  actual_executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "${info_plist}" 2>"${log_file}")" || {
+    return 1
+  }
+
+  {
+    echo "Info.plist: ${info_plist}"
+    echo "Expected executable: ${expected_executable}"
+    echo "Actual executable: ${actual_executable}"
+  } >"${log_file}"
+
+  [[ "${actual_executable}" == "${expected_executable}" ]]
 }
 
 check_nested_code_signatures() {
@@ -231,10 +259,12 @@ check_dmg_contents() {
 }
 
 run_check payload-files check_payload_files
+run_check app-plist-metadata check_bundle_plist_metadata "${APP_PATH}" app-plist-metadata
 run_check app-signature check_bundle_signature_metadata "${APP_PATH}" app-codesign-display
 run_check app-nested-codesign check_nested_code_signatures "${APP_PATH}" app-nested-codesign
 run_check app-entitlements check_release_entitlements "${APP_PATH}" app
 run_check app-dependency-paths check_dependency_paths "${APP_PATH}" app-otool-main-executable
+run_check plugin-plist-metadata check_bundle_plist_metadata "${PLUGIN_PATH}" plugin-plist-metadata
 run_check plugin-signature check_bundle_signature_metadata "${PLUGIN_PATH}" plugin-codesign-display
 run_check plugin-nested-codesign check_nested_code_signatures "${PLUGIN_PATH}" plugin-nested-codesign
 run_check plugin-entitlements check_release_entitlements "${PLUGIN_PATH}" plugin

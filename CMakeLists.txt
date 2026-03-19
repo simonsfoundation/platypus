@@ -489,6 +489,20 @@ if (APPLE)
     endif()
   endif()
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/photoshop")
+  set(PLATYPUS_PHOTOSHOP_BUNDLE_EXECUTABLE_NAME "Platypus")
+  set(PLATYPUS_PHOTOSHOP_BUNDLE_NAME "Platypus")
+  set(PLATYPUS_PHOTOSHOP_BUNDLE_IDENTIFIER
+      "com.simonsfoundation.platypus.photoshop")
+  set(PLATYPUS_PHOTOSHOP_BUNDLE_SHORT_VERSION
+      "${PLATYPUS_PACKAGE_VERSION}")
+  set(PLATYPUS_PHOTOSHOP_BUNDLE_VERSION
+      "${PLATYPUS_PACKAGE_VERSION}")
+  set(PLATYPUS_PHOTOSHOP_BUNDLE_COPYRIGHT
+      "Copyright © 2026 Simons Foundation. All rights reserved.")
+  configure_file(
+      "${CMAKE_CURRENT_SOURCE_DIR}/photoshop/Info.plist.in"
+      "${CMAKE_CURRENT_BINARY_DIR}/photoshop/Info.plist"
+      @ONLY)
   configure_file(
       "${CMAKE_CURRENT_SOURCE_DIR}/photoshop/PiPLs.json.in"
       "${CMAKE_CURRENT_BINARY_DIR}/photoshop/PiPLs.json"
@@ -517,8 +531,16 @@ if (APPLE)
     set_target_properties(PlatypusPlugin PROPERTIES
         BUNDLE TRUE
         BUNDLE_EXTENSION "plugin"
+        MACOSX_BUNDLE_BUNDLE_NAME
+            "${PLATYPUS_PHOTOSHOP_BUNDLE_NAME}"
+        MACOSX_BUNDLE_GUI_IDENTIFIER
+            "${PLATYPUS_PHOTOSHOP_BUNDLE_IDENTIFIER}"
+        MACOSX_BUNDLE_BUNDLE_VERSION
+            "${PLATYPUS_PHOTOSHOP_BUNDLE_VERSION}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING
+            "${PLATYPUS_PHOTOSHOP_BUNDLE_SHORT_VERSION}"
         MACOSX_BUNDLE_INFO_PLIST
-            "${CMAKE_CURRENT_SOURCE_DIR}/photoshop/Info.plist")
+            "${CMAKE_CURRENT_BINARY_DIR}/photoshop/Info.plist")
 else()
     set_target_properties(PlatypusPlugin PROPERTIES SUFFIX ".8bf")
 endif()

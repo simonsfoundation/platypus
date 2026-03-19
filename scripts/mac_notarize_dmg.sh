@@ -155,12 +155,34 @@ if [[ ! -f "${DMG_PATH}" ]]; then
   exit 1
 fi
 
+SUBMIT_JSON="$(mktemp "${TMPDIR:-/tmp}/platypus-notary-submit.XXXXXX.json")"
+LOG_JSON="$(mktemp "${TMPDIR:-/tmp}/platypus-notary-log.XXXXXX.json")"
+trap 'rm -f "${SUBMIT_JSON}" "${LOG_JSON}"' EXIT
+
 echo "Submitting ${DMG_PATH} for notarization"
 xcrun notarytool submit "${DMG_PATH}" \
   --key "${API_KEY_PATH}" \
   --key-id "${KEY_ID}" \
   --issuer "${ISSUER_ID}" \
-  --wait
+  --wait \
+  --output-format json > "${SUBMIT_JSON}"
+
+cat "${SUBMIT_JSON}"
+
+SUBMISSION_ID="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "${SUBMIT_JSON}")"
+SUBMISSION_STATUS="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "${SUBMIT_JSON}")"
+
+if [[ "${SUBMISSION_STATUS}" != "Accepted" ]]; then
+  echo "Notarization failed with status ${SUBMISSION_STATUS}. Fetching Apple log." >&2
+  xcrun notarytool log "${SUBMISSION_ID}" "${LOG_JSON}" \
+    --key "${API_KEY_PATH}" \
+    --key-id "${KEY_ID}" \
+    --issuer "${ISSUER_ID}" || true
+  if [[ -s "${LOG_JSON}" ]]; then
+    cat "${LOG_JSON}" >&2
+  fi
+  exit 1
+fi
 
 echo "Stapling ${DMG_PATH}"
 xcrun stapler staple "${DMG_PATH}"
