@@ -1483,13 +1483,15 @@ void MainWindow::onRemoveTexture()
 
 void MainWindow::onHelp()
 {
-    QString appPath = QCoreApplication::applicationDirPath();
-    #if defined(Q_OS_MACOS)
-        appPath = QFileInfo(appPath).absolutePath();
-        appPath = QFileInfo(appPath).absolutePath();
-		appPath = QFileInfo(appPath).absolutePath();
-    #endif
-    QString helpPath = QDir(appPath).absoluteFilePath("user_guide.pdf");
+    QString helpPath;
+#if defined(Q_OS_MACOS)
+    QDir appDir(QCoreApplication::applicationDirPath());
+    helpPath = QDir(appDir.absoluteFilePath("../Resources"))
+                   .absoluteFilePath("user_guide.pdf");
+#else
+    helpPath = QDir(QCoreApplication::applicationDirPath())
+                   .absoluteFilePath("user_guide.pdf");
+#endif
     QDesktopServices::openUrl(QUrl::fromLocalFile(helpPath));
 }
 

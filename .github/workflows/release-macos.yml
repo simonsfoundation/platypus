@@ -124,6 +124,7 @@ jobs:
           cmake -B build -S . -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_APPLE_APP=ON \
+            -DBUILD_TESTING=OFF \
             -DCMAKE_OSX_ARCHITECTURES="${{ matrix.cmake_arch }}" \
             -DPLATYPUS_PACKAGE_VERSION_OVERRIDE="${{ needs.prepare.outputs.package_version }}" \
             -DCMAKE_PREFIX_PATH="${QT_PREFIX};${OPENCV_PREFIX}" \
@@ -144,6 +145,21 @@ jobs:
             echo "Missing expected architecture ${{ matrix.cmake_arch }}" >&2
             exit 1
           }
+
+      - name: Install staged app bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          STAGE_DIR="${GITHUB_WORKSPACE}/build/stage/${{ matrix.arch }}"
+          RELEASE_DIR="${GITHUB_WORKSPACE}/build/release/${{ matrix.arch }}"
+          VERIFY_DIR="${GITHUB_WORKSPACE}/build/mac-verification/${{ matrix.arch }}"
+          rm -rf "${STAGE_DIR}" "${RELEASE_DIR}" "${VERIFY_DIR}"
+          mkdir -p "${RELEASE_DIR}" "${VERIFY_DIR}"
+          cmake --install build --prefix "${STAGE_DIR}"
+          echo "APP_PATH=${STAGE_DIR}/PlatypusGui.app" >> "$GITHUB_ENV"
+          echo "DMG_PATH=${RELEASE_DIR}/${{ matrix.dmg_name }}" >> "$GITHUB_ENV"
+          echo "CHECKSUM_PATH=${RELEASE_DIR}/${{ matrix.checksum_name }}" >> "$GITHUB_ENV"
+          echo "VERIFY_DIR=${VERIFY_DIR}" >> "$GITHUB_ENV"
 
       - name: Import Apple signing certificate
         shell: bash
@@ -181,33 +197,35 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          MACDEPLOYQT_BIN="$(brew --prefix qt)/bin/macdeployqt"
           bash scripts/mac_sign_app.sh \
-            --app build/PlatypusGui.app \
+            --app "${APP_PATH}" \
             --identity "${{ vars.APPLE_SIGNING_IDENTITY }}" \
-            --macdeployqt "$MACDEPLOYQT_BIN"
+            --skip-deploy
 
-      - name: Create DMG payload
+      - name: Verify app bundle
         shell: bash
         run: |
           set -euo pipefail
-          STAGING_DIR="$RUNNER_TEMP/dmg-root-${{ matrix.arch }}"
-          rm -rf "$STAGING_DIR"
-          mkdir -p "$STAGING_DIR"
-          cp -R build/PlatypusGui.app "$STAGING_DIR/"
-          ln -s /Applications "$STAGING_DIR/Applications"
-          hdiutil create \
-            -volname "Platypus" \
-            -srcfolder "$STAGING_DIR" \
-            -ov \
-            -format UDZO \
-            "build/${{ matrix.dmg_name }}"
+          bash scripts/mac_verify_release.sh \
+            --phase pre-notarize \
+            --app "${APP_PATH}" \
+            --report-dir "${VERIFY_DIR}/pre-notarize"
+
+      - name: Create signed DMG
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/mac_package_dmg.sh \
+            --app "${APP_PATH}" \
+            --dmg "${DMG_PATH}" \
+            --identity "${{ vars.APPLE_SIGNING_IDENTITY }}" \
+            --volname "Platypus"
 
       - name: Notarize DMG
         shell: bash
         run: |
           set -euo pipefail
-          xcrun notarytool submit "build/${{ matrix.dmg_name }}" \
+          xcrun notarytool submit "${DMG_PATH}" \
             --key "$APPSTORE_CONNECT_API_KEY_PATH" \
             --key-id "${{ secrets.APPSTORE_CONNECT_API_KEY_ID }}" \
             --issuer "${{ secrets.APPSTORE_CONNECT_API_ISSUER_ID }}" \
@@ -217,22 +235,32 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          xcrun stapler staple "build/${{ matrix.dmg_name }}"
-          spctl -a -t open --context context:primary-signature -v "build/${{ matrix.dmg_name }}"
+          xcrun stapler staple "${DMG_PATH}"
+
+      - name: Verify final release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/mac_verify_release.sh \
+            --phase post-staple \
+            --app "${APP_PATH}" \
+            --dmg "${DMG_PATH}" \
+            --report-dir "${VERIFY_DIR}/post-staple"
 
       - name: Generate checksum
         shell: bash
         run: |
           set -euo pipefail
-          shasum -a 256 "build/${{ matrix.dmg_name }}" > "build/${{ matrix.checksum_name }}"
+          shasum -a 256 "${DMG_PATH}" > "${CHECKSUM_PATH}"
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos-${{ matrix.arch }}-release
           path: |
-            build/${{ matrix.dmg_name }}
-            build/${{ matrix.checksum_name }}
+            build/release/${{ matrix.arch }}/${{ matrix.dmg_name }}
+            build/release/${{ matrix.arch }}/${{ matrix.checksum_name }}
+            build/mac-verification/${{ matrix.arch }}
 
       - name: Cleanup temporary keychain
         if: always()

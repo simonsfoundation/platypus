@@ -5,6 +5,7 @@ VERSION 0.0.1
 LANGUAGES CXX)
 
 include(CTest)
+include(GNUInstallDirs)
 
 # Enable automatic processing of Qt's MOC, UIC, and RCC tools
 set(CMAKE_CXX_STANDARD 17)
@@ -18,6 +19,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Configuration Options
 option(BUILD_PHOTOSHOP_PLUGIN "Build the Photoshop plugin" OFF)
 option(BUILD_APPLE_APP "Build the Apple App instead of an executable" OFF)
+set(PLATYPUS_OPENCV_COMPONENTS core imgproc imgcodecs flann)
 option(OpenCV_DIR "Path to OpenCV if not found automatically" "")
 set(PLATYPUS_PACKAGE_VERSION_OVERRIDE "" CACHE STRING
     "Override the version string used for packaged release artifacts")
@@ -42,9 +44,10 @@ endif()
 
 # Find OpenCV
 if(OpenCV_DIR)
-    find_package(OpenCV REQUIRED PATHS ${OpenCV_DIR} NO_DEFAULT_PATH)
+    find_package(OpenCV REQUIRED COMPONENTS ${PLATYPUS_OPENCV_COMPONENTS}
+                 PATHS ${OpenCV_DIR} NO_DEFAULT_PATH)
 else()
-    find_package(OpenCV)
+    find_package(OpenCV REQUIRED COMPONENTS ${PLATYPUS_OPENCV_COMPONENTS})
 endif()
 if(NOT OpenCV_FOUND)
     message(FATAL_ERROR
@@ -55,6 +58,11 @@ if(NOT OpenCV_FOUND)
         "    Linux:  sudo apt-get install libopencv-dev\n"
         "    Windows: use vcpkg (see readme.md)\n")
 endif()
+
+set(PLATYPUS_USER_GUIDE_SOURCE
+    "${CMAKE_CURRENT_SOURCE_DIR}/installer/payload/files/user_guide.pdf")
+set(PLATYPUS_APP_ICON_SOURCE
+    "${CMAKE_CURRENT_SOURCE_DIR}/mac/AppIcon.icns")
 
 add_library(platypus STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/platypus/CradleFunctions.cpp
@@ -132,6 +140,14 @@ target_link_libraries(platypus_gui PUBLIC
 if (BUILD_APPLE_APP)
   set(MACOSX_BUNDLE TRUE)
   add_executable(PlatypusGui MACOSX_BUNDLE src/main.cpp)
+  target_sources(PlatypusGui PRIVATE
+      "${PLATYPUS_USER_GUIDE_SOURCE}"
+      "${PLATYPUS_APP_ICON_SOURCE}")
+  set_source_files_properties(
+      "${PLATYPUS_USER_GUIDE_SOURCE}"
+      "${PLATYPUS_APP_ICON_SOURCE}"
+      PROPERTIES
+      MACOSX_PACKAGE_LOCATION "Resources")
   set_target_properties(PlatypusGui PROPERTIES
     MACOSX_BUNDLE TRUE
     MACOSX_BUNDLE_BUNDLE_NAME "platypus"
@@ -142,7 +158,7 @@ if (BUILD_APPLE_APP)
     MACOSX_FRAMEWORK_IDENTIFIER "com.simonsfoundation.platypus"
     XCODE_ATTRIBUTE_LD_RUNPATH_SEARCH_PATHS "@loader_path/Libraries"
     XCODE_ATTRIBUTE_ENABLE_HARDENED_RUNTIME YES
-    MACOSX_BUNDLE_ICON_FILE "${CMAKE_CURRENT_SOURCE_DIR}/mac/AppIcon.icns"
+    MACOSX_BUNDLE_ICON_FILE "AppIcon.icns"
   )
 elseif(WIN32)
   add_executable(PlatypusGui WIN32 src/main.cpp)
@@ -170,9 +186,11 @@ install(TARGETS PlatypusGui
     BUNDLE DESTINATION .
     RUNTIME DESTINATION .)
 
-install(FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/user_guide.pdf"
-    DESTINATION .)
+if (NOT BUILD_APPLE_APP)
+  install(FILES
+      "${CMAKE_CURRENT_BINARY_DIR}/user_guide.pdf"
+      DESTINATION .)
+endif()
 
 # Only find and link xcb on Linux
 if(UNIX AND NOT APPLE)
@@ -180,7 +198,79 @@ if(UNIX AND NOT APPLE)
   target_link_libraries(PlatypusGui PRIVATE xcb)
 endif()
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/installer/payload/files/user_guide.pdf ${CMAKE_CURRENT_BINARY_DIR}/user_guide.pdf COPYONLY)
+if (NOT BUILD_APPLE_APP)
+  configure_file("${PLATYPUS_USER_GUIDE_SOURCE}"
+                 "${CMAKE_CURRENT_BINARY_DIR}/user_guide.pdf" COPYONLY)
+endif()
+
+if (APPLE AND BUILD_APPLE_APP)
+  if (NOT MACDEPLOYQT_EXECUTABLE)
+    find_program(MACDEPLOYQT_EXECUTABLE
+        NAMES macdeployqt
+        HINTS
+          "${Qt6_DIR}/../../../bin"
+          "${Qt6_DIR}/../../bin"
+          "${CMAKE_PREFIX_PATH}/bin")
+  endif()
+  if (NOT MACDEPLOYQT_EXECUTABLE)
+    message(FATAL_ERROR
+        "macdeployqt not found.\n"
+        "  Ensure Qt is installed and macdeployqt is on PATH, or pass -DMACDEPLOYQT_EXECUTABLE=/path/to/macdeployqt.")
+  endif()
+
+  set(PLATYPUS_BUNDLE_FIXUP_DIRS "")
+  foreach(prefix IN LISTS CMAKE_PREFIX_PATH)
+    if (EXISTS "${prefix}/lib")
+      list(APPEND PLATYPUS_BUNDLE_FIXUP_DIRS "${prefix}/lib")
+    endif()
+  endforeach()
+
+  if (OpenCV_DIR)
+    get_filename_component(_platypus_opencv_prefix "${OpenCV_DIR}/../../.." ABSOLUTE)
+    if (EXISTS "${_platypus_opencv_prefix}/lib")
+      list(APPEND PLATYPUS_BUNDLE_FIXUP_DIRS "${_platypus_opencv_prefix}/lib")
+    endif()
+  endif()
+
+  list(REMOVE_DUPLICATES PLATYPUS_BUNDLE_FIXUP_DIRS)
+  get_filename_component(_platypus_qt_host_prefix
+                         "${MACDEPLOYQT_EXECUTABLE}/../../../.." ABSOLUTE)
+  if (EXISTS "${_platypus_qt_host_prefix}/lib")
+    list(APPEND PLATYPUS_BUNDLE_FIXUP_DIRS "${_platypus_qt_host_prefix}/lib")
+  endif()
+  if (EXISTS "${_platypus_qt_host_prefix}/opt")
+    file(GLOB _platypus_homebrew_opt_lib_dirs LIST_DIRECTORIES TRUE
+         "${_platypus_qt_host_prefix}/opt/*/lib")
+    list(APPEND PLATYPUS_BUNDLE_FIXUP_DIRS ${_platypus_homebrew_opt_lib_dirs})
+    file(GLOB _platypus_homebrew_gcc_lib_dirs LIST_DIRECTORIES TRUE
+         "${_platypus_qt_host_prefix}/opt/gcc/lib/gcc/*")
+    list(APPEND PLATYPUS_BUNDLE_FIXUP_DIRS ${_platypus_homebrew_gcc_lib_dirs})
+  endif()
+  list(REMOVE_DUPLICATES PLATYPUS_BUNDLE_FIXUP_DIRS)
+  list(JOIN PLATYPUS_BUNDLE_FIXUP_DIRS ";" PLATYPUS_BUNDLE_FIXUP_DIRS_JOINED)
+
+  set(PLATYPUS_QT_PLUGIN_DIR "${_platypus_qt_host_prefix}/share/qt/plugins")
+  set(PLATYPUS_QT_PLUGIN_FILES
+      "platforms/libqcocoa.dylib"
+      "imageformats/libqgif.dylib"
+      "imageformats/libqico.dylib"
+      "imageformats/libqjpeg.dylib"
+      "imageformats/libqtiff.dylib"
+      "imageformats/libqwebp.dylib")
+  list(JOIN PLATYPUS_QT_PLUGIN_FILES ";" PLATYPUS_QT_PLUGIN_FILES_JOINED)
+
+  configure_file(
+      "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PlatypusDeployBundle.cmake.in"
+      "${CMAKE_CURRENT_BINARY_DIR}/PlatypusDeployBundle.cmake"
+      @ONLY)
+  install(SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/PlatypusDeployBundle.cmake")
+
+  configure_file(
+      "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PlatypusFixBundle.cmake.in"
+      "${CMAKE_CURRENT_BINARY_DIR}/PlatypusFixBundle.cmake"
+      @ONLY)
+  install(SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/PlatypusFixBundle.cmake")
+endif()
 
 if (WIN32 AND NOT BUILD_PHOTOSHOP_PLUGIN)
   set(CPACK_GENERATOR "NSIS")

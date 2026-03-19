@@ -21,6 +21,7 @@ Environment:
   If a .env file exists in the repo root, it is loaded automatically.
 
   Supported .env variables:
+    APPLE_SIGNING_IDENTITY
     APPSTORE_CONNECT_API_KEY_PATH
     APPSTORE_CONNECT_API_KEY_ID
     APPSTORE_CONNECT_API_ISSUER_ID
@@ -58,6 +59,7 @@ fi
 APP_PATH="${PLATYPUS_APP_PATH:-build/PlatypusGui.app}"
 DMG_PATH="${PLATYPUS_DMG_PATH:-build/PlatypusGui.dmg}"
 VOLNAME="${PLATYPUS_DMG_VOLNAME:-Platypus}"
+IDENTITY="${APPLE_SIGNING_IDENTITY:-}"
 API_KEY_PATH="${APPSTORE_CONNECT_API_KEY_PATH:-}"
 KEY_ID="${APPSTORE_CONNECT_API_KEY_ID:-}"
 ISSUER_ID="${APPSTORE_CONNECT_API_ISSUER_ID:-}"
@@ -78,6 +80,11 @@ while [[ $# -gt 0 ]]; do
     --volname)
       [[ $# -ge 2 ]] || { echo "Missing value for $1" >&2; exit 1; }
       VOLNAME="$2"
+      shift 2
+      ;;
+    --identity)
+      [[ $# -ge 2 ]] || { echo "Missing value for $1" >&2; exit 1; }
+      IDENTITY="$2"
       shift 2
       ;;
     --api-key)
@@ -131,19 +138,16 @@ fi
 mkdir -p "$(dirname "${DMG_PATH}")"
 
 if [[ "${SKIP_DMG}" -eq 0 ]]; then
-  STAGING_DIR="$(mktemp -d "${TMPDIR:-/tmp}/platypus-dmg.XXXXXX")"
-  trap 'rm -rf "${STAGING_DIR}"' EXIT
+  if [[ -z "${IDENTITY}" ]]; then
+    echo "Missing DMG signing identity. Set APPLE_SIGNING_IDENTITY or pass --identity." >&2
+    exit 1
+  fi
 
-  cp -R "${APP_PATH}" "${STAGING_DIR}/"
-  ln -s /Applications "${STAGING_DIR}/Applications"
-
-  echo "Creating DMG at ${DMG_PATH}"
-  hdiutil create \
-    -volname "${VOLNAME}" \
-    -srcfolder "${STAGING_DIR}" \
-    -ov \
-    -format UDZO \
-    "${DMG_PATH}"
+  bash "${SCRIPT_DIR}/mac_package_dmg.sh" \
+    --app "${APP_PATH}" \
+    --dmg "${DMG_PATH}" \
+    --identity "${IDENTITY}" \
+    --volname "${VOLNAME}"
 fi
 
 if [[ ! -f "${DMG_PATH}" ]]; then

@@ -116,14 +116,14 @@ fi
 cd "${REPO_ROOT}"
 
 if [[ "$VERIFY_ONLY" -eq 0 ]]; then
-  if [[ -z "$MACDEPLOYQT_BIN" ]]; then
-    if ! MACDEPLOYQT_BIN="$(command -v macdeployqt)"; then
-      echo "macdeployqt not found on PATH" >&2
-      exit 1
-    fi
-  fi
-
   if [[ "$SKIP_DEPLOY" -eq 0 ]]; then
+    if [[ -z "$MACDEPLOYQT_BIN" ]]; then
+      if ! MACDEPLOYQT_BIN="$(command -v macdeployqt)"; then
+        echo "macdeployqt not found on PATH" >&2
+        exit 1
+      fi
+    fi
+
     echo "Running macdeployqt on $APP_PATH"
     "$MACDEPLOYQT_BIN" "$APP_PATH" -always-overwrite
   fi
@@ -134,13 +134,20 @@ if [[ "$VERIFY_ONLY" -eq 0 ]]; then
     codesign --force --sign "$IDENTITY" --options runtime --timestamp "$path"
   }
 
+  bundle_prune_expr=(
+    \( -name '*.framework' -o -name '*.app' -o -name '*.bundle' -o -name '*.plugin' -o -name '*.xpc' \)
+    -prune
+  )
+
   while IFS= read -r -d '' file; do
     sign_path "$file"
-  done < <(find "$APP_PATH/Contents" -type f \( -name '*.dylib' -o -name '*.so' \) -print0 | sort -z)
+  done < <(find "$APP_PATH/Contents" "${bundle_prune_expr[@]}" -o \
+      -type f \( -name '*.dylib' -o -name '*.so' \) -print0 | sort -z)
 
   while IFS= read -r -d '' exec_file; do
     sign_path "$exec_file"
-  done < <(find "$APP_PATH/Contents" -type f -perm -111 ! \( -name '*.dylib' -o -name '*.so' \) -print0 | sort -z)
+  done < <(find "$APP_PATH/Contents" "${bundle_prune_expr[@]}" -o \
+      -type f -perm -111 ! \( -name '*.dylib' -o -name '*.so' \) -print0 | sort -z)
 
   while IFS= read -r -d '' framework; do
     sign_path "$framework"
@@ -150,15 +157,12 @@ if [[ "$VERIFY_ONLY" -eq 0 ]]; then
     sign_path "$bundle"
   done < <(find "$APP_PATH/Contents" \( -name '*.app' -o -name '*.bundle' -o -name '*.plugin' -o -name '*.xpc' \) -print0 | sort -z)
 
-  echo "Verifying nested signatures before signing app bundle"
-  codesign --verify --deep --strict --verbose=2 "$APP_PATH"
-
   echo "Signing app bundle $APP_PATH"
   codesign --force --sign "$IDENTITY" --options runtime --timestamp "$APP_PATH"
 fi
 
-echo "Verifying app signature"
-codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+echo "Inspecting app signature"
+codesign -dvv "$APP_PATH" 2>&1 | sed -n '1,80p'
 
 if [[ "$RUN_GATEKEEPER" -eq 1 ]]; then
   echo "Running Gatekeeper assessment"
