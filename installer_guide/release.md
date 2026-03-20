@@ -25,10 +25,10 @@ gh repo set-default simonsfoundation/platypus
 ## macOS Release
 
 The official macOS release entrypoint is
-[`release-macos-combined.yml`](../.github/workflows/release-macos-combined.yml).
-It runs automatically on `push` to tags matching `v*` and treats both the
-standard macOS artifacts and the macOS 13-compatible artifacts as required for
-the release.
+[`release-macos.yml`](../.github/workflows/release-macos.yml). It runs
+automatically on `push` to tags matching `v*` and treats both the standard
+macOS artifacts and the macOS 13-compatible artifacts as required for the
+release.
 
 Create and push the tag:
 
@@ -37,14 +37,14 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-That tag push starts the combined macOS release workflow, which dispatches both
-of the standalone build pipelines and publishes the GitHub Release only after
-all required macOS assets are present.
+That tag push starts the macOS release workflow, which builds the standard
+macOS and macOS 13 artifacts in one workflow run and publishes the GitHub
+Release only after all required macOS assets are present.
 
 Watch the combined run:
 
 ```bash
-gh run list --workflow release-macos-combined.yml --limit 5
+gh run list --workflow release-macos.yml --limit 5
 gh run watch <run-id>
 ```
 
@@ -57,18 +57,15 @@ gh release download v0.1.0 --dir /tmp/platypus-release-check
 
 ## macOS Standalone Workflow
 
-The standard macOS build workflow is
-[`release-macos.yml`](../.github/workflows/release-macos.yml). It remains
-available as a `workflow_dispatch` workflow for debugging or as an explicit
-manual escape hatch.
+The same [`release-macos.yml`](../.github/workflows/release-macos.yml) workflow
+can also be run manually with `workflow_dispatch` for debugging or as an
+explicit manual escape hatch.
 
 It expects:
 
 - `tag`
 - `target_ref`
 - `prerelease`
-- `publish_release`
-- `release_request_id`
 
 Run it in normal publish mode with:
 
@@ -77,20 +74,7 @@ gh workflow run release-macos.yml \
   --ref main \
   -f tag=v0.1.0 \
   -f target_ref=main \
-  -f prerelease=false \
-  -f publish_release=true
-```
-
-Run it in build-only mode, without publishing release assets:
-
-```bash
-gh workflow run release-macos.yml \
-  --ref main \
-  -f tag=v0.1.0 \
-  -f target_ref=main \
-  -f prerelease=false \
-  -f publish_release=false \
-  -f release_request_id=debug
+  -f prerelease=false
 ```
 
 For a prerelease from a branch or commit in publish mode:
@@ -100,8 +84,7 @@ gh workflow run release-macos.yml \
   --ref main \
   -f tag=v0.1.0-rc1 \
   -f target_ref=<branch-or-sha> \
-  -f prerelease=true \
-  -f publish_release=true
+  -f prerelease=true
 ```
 
 Watch the run:
@@ -211,7 +194,7 @@ gh release download v0.1.0 --dir /tmp/platypus-release-check
 
 ## Current Limitation
 
-The macOS workflows are now coordinated around the combined macOS tag-push
+The macOS workflows are now coordinated around the main macOS tag-push
 workflow, but the Windows workflow still independently calls `gh release
 create`.
 
