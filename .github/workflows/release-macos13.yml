@@ -84,7 +84,7 @@ jobs:
       PLATYPUS_MACOS_DEPLOYMENT_TARGET: "13.0"
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg/bincache
       VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-      VCPKG_OVERLAY_TRIPLETS: ${{ github.workspace }}/.github/vcpkg/triplets
+      VCPKG_OVERLAY_TRIPLETS: ${{ github.workspace }}/.github/vcpkg-triplets
     strategy:
       fail-fast: false
       matrix:
