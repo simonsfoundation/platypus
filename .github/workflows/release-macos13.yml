@@ -170,7 +170,6 @@ jobs:
           set -euo pipefail
           "${_VCPKG_}/vcpkg" install \
             --clean-buildtrees-after-build \
-            --clean-packages-after-build \
             --x-manifest-root="${GITHUB_WORKSPACE}" \
             --x-install-root="${VCPKG_INSTALLED_DIR}" \
             --overlay-triplets="${VCPKG_OVERLAY_TRIPLETS}" \
