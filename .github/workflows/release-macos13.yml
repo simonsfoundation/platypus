@@ -50,12 +50,6 @@ jobs:
           git fetch --tags origin
           git rev-parse --verify "${TAG}^{commit}" >/dev/null
 
-      - name: Ensure release exists
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh release view "${{ github.event.inputs.tag }}" >/dev/null
-
       - name: Derive package version
         id: package_version
         shell: bash
@@ -72,6 +66,18 @@ jobs:
           set -euo pipefail
           TARGET_SHA="$(git rev-parse --verify "${{ github.event.inputs.tag }}^{commit}")"
           echo "sha=${TARGET_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure release exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag }}"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --target "${{ steps.resolve_target.outputs.sha }}" \
+              --title "$TAG" \
+              --notes ""
+          fi
 
   build:
     name: Build, sign, and notarize macOS 13 (${{ matrix.arch }})

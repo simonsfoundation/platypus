@@ -28,7 +28,6 @@ The macOS release workflow is [`release-macos.yml`](../.github/workflows/release
 It is a `workflow_dispatch` workflow and expects:
 
 - `tag`
-- `macos_deployment_target`
 - `target_ref`
 - `prerelease`
 
@@ -38,7 +37,6 @@ Run it with:
 gh workflow run release-macos.yml \
   --ref main \
   -f tag=v0.1.0 \
-  -f macos_deployment_target=15.0 \
   -f target_ref=main \
   -f prerelease=false
 ```
@@ -49,27 +47,9 @@ For a prerelease from a branch or commit:
 gh workflow run release-macos.yml \
   --ref main \
   -f tag=v0.1.0-rc1 \
-  -f macos_deployment_target=15.0 \
   -f target_ref=<branch-or-sha> \
   -f prerelease=true
 ```
-
-This single workflow now publishes both:
-
-- the standard macOS release artifacts
-- the macOS 13 compatibility artifacts
-
-The regular release will upload these additional compatibility assets
-automatically:
-
-- `Platypus-macos13-arm64.dmg`
-- `Platypus-macos13-arm64.sha256`
-- `Platypus-macos13-x86_64.dmg`
-- `Platypus-macos13-x86_64.sha256`
-- `Platypus-photoshop-macos13-arm64.dmg`
-- `Platypus-photoshop-macos13-arm64.sha256`
-- `Platypus-photoshop-macos13-x86_64.dmg`
-- `Platypus-photoshop-macos13-x86_64.sha256`
 
 Watch the run:
 
@@ -89,12 +69,11 @@ gh release download v0.1.0 --dir /tmp/platypus-release-check
 
 The macOS 13 compatibility workflow is
 [`release-macos13.yml`](../.github/workflows/release-macos13.yml).
-It is a separate `workflow_dispatch` workflow for backfilling macOS 13-compatible
-artifacts onto an existing release. The normal macOS release workflow already
-publishes these assets for new releases.
+It is a separate `workflow_dispatch` workflow for publishing macOS 13-compatible
+artifacts. If the GitHub Release does not exist yet, this workflow creates it
+before uploading the macOS 13 assets.
 
-Use it only when a release already exists and you need to add the macOS 13
-assets after the fact:
+Use it like this:
 
 ```bash
 gh workflow run release-macos13.yml \
