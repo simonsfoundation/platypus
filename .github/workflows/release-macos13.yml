@@ -160,21 +160,77 @@ jobs:
           set -euo pipefail
           VCPKG_INSTALLED_DIR="${GITHUB_WORKSPACE}/vcpkg_installed/macos13/${{ matrix.arch }}"
           VCPKG_QT_TOOLS_DIR="${VCPKG_INSTALLED_DIR}/${{ matrix.vcpkg_host_triplet }}/tools/Qt6/bin"
-          mkdir -p "${VCPKG_INSTALLED_DIR}" "${VCPKG_DEFAULT_BINARY_CACHE}"
+          VCPKG_DIAGNOSTIC_DIR="${GITHUB_WORKSPACE}/vcpkg-diagnostics/${{ matrix.arch }}"
+          mkdir -p "${VCPKG_INSTALLED_DIR}" "${VCPKG_DEFAULT_BINARY_CACHE}" "${VCPKG_DIAGNOSTIC_DIR}"
           echo "VCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR}" >> "$GITHUB_ENV"
           echo "VCPKG_QT_TOOLS_DIR=${VCPKG_QT_TOOLS_DIR}" >> "$GITHUB_ENV"
+          echo "VCPKG_DIAGNOSTIC_DIR=${VCPKG_DIAGNOSTIC_DIR}" >> "$GITHUB_ENV"
 
       - name: Build vcpkg dependencies
         shell: bash
         run: |
           set -euo pipefail
-          "${_VCPKG_}/vcpkg" install \
+          if "${_VCPKG_}/vcpkg" install \
             --clean-buildtrees-after-build \
             --x-manifest-root="${GITHUB_WORKSPACE}" \
             --x-install-root="${VCPKG_INSTALLED_DIR}" \
             --overlay-triplets="${VCPKG_OVERLAY_TRIPLETS}" \
             --triplet="${{ matrix.vcpkg_triplet }}" \
-            --host-triplet="${{ matrix.vcpkg_host_triplet }}"
+            --host-triplet="${{ matrix.vcpkg_host_triplet }}"; then
+            exit 0
+          else
+            status=$?
+          fi
+          set +e
+          echo "vcpkg install failed with exit code ${status}" >&2
+          echo "Collecting vcpkg diagnostics into ${VCPKG_DIAGNOSTIC_DIR}" >&2
+
+          if [[ -d "${_VCPKG_}/buildtrees" ]]; then
+            find "${_VCPKG_}/buildtrees" -type f \
+              \( -name '*.log' -o -name '*.out' -o -name '*.err' -o -name 'issue_body.md' \) \
+              | while IFS= read -r src; do
+                  rel="${src#${_VCPKG_}/buildtrees/}"
+                  dest="${VCPKG_DIAGNOSTIC_DIR}/buildtrees/${rel}"
+                  mkdir -p "$(dirname "${dest}")"
+                  cp "${src}" "${dest}"
+                done
+          fi
+
+          if [[ -d "${VCPKG_INSTALLED_DIR}/vcpkg" ]]; then
+            find "${VCPKG_INSTALLED_DIR}/vcpkg" -type f \
+              | while IFS= read -r src; do
+                  rel="${src#${VCPKG_INSTALLED_DIR}/vcpkg/}"
+                  dest="${VCPKG_DIAGNOSTIC_DIR}/installed-vcpkg/${rel}"
+                  mkdir -p "$(dirname "${dest}")"
+                  cp "${src}" "${dest}"
+                done
+          fi
+
+          if [[ -f "${VCPKG_DIAGNOSTIC_DIR}/installed-vcpkg/issue_body.md" ]]; then
+            echo "::group::vcpkg issue_body.md"
+            cat "${VCPKG_DIAGNOSTIC_DIR}/installed-vcpkg/issue_body.md"
+            echo "::endgroup::"
+          fi
+
+          find "${VCPKG_DIAGNOSTIC_DIR}" -type f \
+            \( -name '*.log' -o -name '*.out' -o -name '*.err' \) \
+            -exec ls -t {} + 2>/dev/null \
+            | head -n 10 \
+            | while IFS= read -r log; do
+                echo "::group::${log#${GITHUB_WORKSPACE}/}"
+                tail -n 200 "${log}" || true
+                echo "::endgroup::"
+              done || true
+
+          exit "${status}"
+
+      - name: Upload vcpkg diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos13-${{ matrix.arch }}-vcpkg-diagnostics
+          path: vcpkg-diagnostics/${{ matrix.arch }}
+          if-no-files-found: warn
 
       - name: Resolve Qt deployment tools
         shell: bash
