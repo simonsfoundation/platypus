@@ -11,6 +11,8 @@ Options:
   --phase <phase>        Verification phase to run
   --app <path>           Path to .app bundle. Default: build/PlatypusGui.app
   --dmg <path>           Path to .dmg for post-staple checks
+  --deployment-target <version>
+                         Maximum macOS minimum-version allowed in bundled Mach-O files
   --report-dir <path>    Output directory for verification logs
   -h, --help             Show this help text
 
@@ -26,24 +28,14 @@ EOF
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${REPO_ROOT}/.env"
+source "${SCRIPT_DIR}/mac_verify_common.sh"
 
-if [[ -f "${ENV_FILE}" ]]; then
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    [[ -n "$line" ]] || continue
-    [[ "$line" =~ ^[[:space:]]*# ]] && continue
-    if [[ "$line" == *=* ]]; then
-      key="${line%%=*}"
-      value="${line#*=}"
-      key="${key#"${key%%[![:space:]]*}"}"
-      key="${key%"${key##*[![:space:]]}"}"
-      export "$key=$value"
-    fi
-  done < "${ENV_FILE}"
-fi
+load_repo_env "${ENV_FILE}"
 
 PHASE=""
 APP_PATH="${PLATYPUS_APP_PATH:-build/PlatypusGui.app}"
 DMG_PATH="${PLATYPUS_DMG_PATH:-build/PlatypusGui.dmg}"
+DEPLOYMENT_TARGET="${PLATYPUS_MACOS_DEPLOYMENT_TARGET:-}"
 REPORT_DIR="build/mac-verification"
 FAILURES=0
 
@@ -62,6 +54,11 @@ while [[ $# -gt 0 ]]; do
     --dmg)
       [[ $# -ge 2 ]] || { echo "Missing value for $1" >&2; exit 1; }
       DMG_PATH="$2"
+      shift 2
+      ;;
+    --deployment-target)
+      [[ $# -ge 2 ]] || { echo "Missing value for $1" >&2; exit 1; }
+      DEPLOYMENT_TARGET="$2"
       shift 2
       ;;
     --report-dir)
@@ -187,6 +184,34 @@ check_dependency_paths() {
   done < <(awk 'NR > 1 {print $1}' "${log_file}")
 }
 
+check_deployment_target() {
+  local target_version="$1"
+  local log_file="${REPORT_DIR}/deployment-target.log"
+  local checked_count=0
+  local binary_path=""
+  local minos=""
+
+  : >"${log_file}"
+
+  while IFS= read -r -d '' binary_path; do
+    checked_count=$((checked_count + 1))
+    minos="$(extract_minos "${binary_path}")" || {
+      echo "Unable to determine minimum macOS version for ${binary_path}" >>"${log_file}"
+      return 1
+    }
+    printf '%s minos %s\n' "${binary_path}" "${minos}" >>"${log_file}"
+    if version_gt "${minos}" "${target_version}"; then
+      echo "Binary requires macOS ${minos}, above requested target ${target_version}: ${binary_path}" >>"${log_file}"
+      return 1
+    fi
+  done < <(collect_bundle_macho_files "${APP_PATH}")
+
+  if [[ "${checked_count}" -eq 0 ]]; then
+    echo "No Mach-O files found in ${APP_PATH}" >>"${log_file}"
+    return 1
+  fi
+}
+
 if [[ ! -d "${APP_PATH}" ]]; then
   echo "App bundle not found: ${APP_PATH}" >&2
   exit 1
@@ -196,6 +221,9 @@ run_check app-signature check_app_signature_metadata
 run_check nested-codesign check_nested_code_signatures
 run_check entitlements check_release_entitlements
 run_check dependency-paths check_dependency_paths
+if [[ -n "${DEPLOYMENT_TARGET}" ]]; then
+  run_check deployment-target check_deployment_target "${DEPLOYMENT_TARGET}"
+fi
 
 if command -v syspolicy_check >/dev/null 2>&1; then
   run_optional_check syspolicy-notary-submission syspolicy_check notary-submission "${APP_PATH}"

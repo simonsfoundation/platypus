@@ -1,43 +1,27 @@
-name: Release macOS
+name: Release macOS 13 Compatibility
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to create and publish, for example v0.1.0
+        description: Existing release tag to augment with macOS 13-compatible artifacts
         required: true
         type: string
-      macos_deployment_target:
-        description: Minimum macOS version the release artifacts must run on
-        required: false
-        default: "13.0"
-        type: string
-      target_ref:
-        description: Branch or commit SHA to release
-        required: false
-        default: main
-        type: string
-      prerelease:
-        description: Mark the GitHub Release as a prerelease
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-macos-${{ github.event.inputs.tag }}
+  group: release-macos13-${{ github.event.inputs.tag }}
   cancel-in-progress: false
 
 jobs:
   prepare:
-    name: Prepare release tag
+    name: Validate release tag
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
     outputs:
-      macos_deployment_target: ${{ steps.deployment_target.outputs.value }}
       package_version: ${{ steps.package_version.outputs.value }}
       target_sha: ${{ steps.resolve_target.outputs.sha }}
 
@@ -58,6 +42,20 @@ jobs:
             exit 1
           fi
 
+      - name: Ensure tag exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag }}"
+          git fetch --tags origin
+          git rev-parse --verify "${TAG}^{commit}" >/dev/null
+
+      - name: Ensure release exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "${{ github.event.inputs.tag }}" >/dev/null
+
       - name: Derive package version
         id: package_version
         shell: bash
@@ -67,56 +65,26 @@ jobs:
           PACKAGE_VERSION="${PACKAGE_VERSION#v}"
           echo "value=${PACKAGE_VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve macOS deployment target
-        id: deployment_target
-        shell: bash
-        run: |
-          set -euo pipefail
-          TARGET="${{ github.event.inputs.macos_deployment_target }}"
-          if [[ ! "${TARGET}" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
-            echo "macos_deployment_target must look like 13, 13.0, or 13.0.1" >&2
-            exit 1
-          fi
-          echo "value=${TARGET}" >> "$GITHUB_OUTPUT"
-
       - name: Resolve target ref
         id: resolve_target
         shell: bash
         run: |
           set -euo pipefail
-          TARGET_REF="${{ github.event.inputs.target_ref }}"
-          TARGET_SHA="$(git rev-parse --verify "${TARGET_REF}^{commit}")"
+          TARGET_SHA="$(git rev-parse --verify "${{ github.event.inputs.tag }}^{commit}")"
           echo "sha=${TARGET_SHA}" >> "$GITHUB_OUTPUT"
 
-      - name: Check for existing release
-        shell: bash
-        run: |
-          set -euo pipefail
-          TAG="${{ github.event.inputs.tag }}"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists" >&2
-            exit 1
-          fi
-
-      - name: Create tag if needed
-        shell: bash
-        run: |
-          set -euo pipefail
-          TAG="${{ github.event.inputs.tag }}"
-          git fetch --tags origin
-          if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
-            git tag "$TAG" "${{ steps.resolve_target.outputs.sha }}"
-            git push origin "refs/tags/$TAG"
-          fi
-
   build:
-    name: Build, sign, and notarize (${{ matrix.arch }})
+    name: Build, sign, and notarize macOS 13 (${{ matrix.arch }})
     needs: prepare
     runs-on: ${{ matrix.runner }}
     environment: release-macos
     env:
-      MACOSX_DEPLOYMENT_TARGET: ${{ needs.prepare.outputs.macos_deployment_target }}
-      PLATYPUS_MACOS_DEPLOYMENT_TARGET: ${{ needs.prepare.outputs.macos_deployment_target }}
+      _VCPKG_: ${{ github.workspace }}/vcpkg
+      MACOSX_DEPLOYMENT_TARGET: "13.0"
+      PLATYPUS_MACOS_DEPLOYMENT_TARGET: "13.0"
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg/bincache
+      VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+      VCPKG_OVERLAY_TRIPLETS: ${{ github.workspace }}/.github/vcpkg/triplets
     strategy:
       fail-fast: false
       matrix:
@@ -124,19 +92,29 @@ jobs:
           - arch: arm64
             runner: macos-15
             cmake_arch: arm64
-            dmg_name: Platypus-macos-arm64.dmg
-            checksum_name: Platypus-macos-arm64.sha256
-            photoshop_dmg_name: Platypus-photoshop-macos-arm64.dmg
-            photoshop_checksum_name: Platypus-photoshop-macos-arm64.sha256
+            vcpkg_triplet: arm64-osx-dynamic-13-release
+            vcpkg_host_triplet: arm64-osx-dynamic-13-release
+            dmg_name: Platypus-macos13-arm64.dmg
+            checksum_name: Platypus-macos13-arm64.sha256
+            photoshop_dmg_name: Platypus-photoshop-macos13-arm64.dmg
+            photoshop_checksum_name: Platypus-photoshop-macos13-arm64.sha256
           - arch: x86_64
             runner: macos-15-intel
             cmake_arch: x86_64
-            dmg_name: Platypus-macos-x86_64.dmg
-            checksum_name: Platypus-macos-x86_64.sha256
-            photoshop_dmg_name: Platypus-photoshop-macos-x86_64.dmg
-            photoshop_checksum_name: Platypus-photoshop-macos-x86_64.sha256
+            vcpkg_triplet: x64-osx-dynamic-13-release
+            vcpkg_host_triplet: x64-osx-dynamic-13-release
+            dmg_name: Platypus-macos13-x86_64.dmg
+            checksum_name: Platypus-macos13-x86_64.sha256
+            photoshop_dmg_name: Platypus-photoshop-macos13-x86_64.dmg
+            photoshop_checksum_name: Platypus-photoshop-macos13-x86_64.sha256
 
     steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -148,7 +126,7 @@ jobs:
           path: |
             ~/Library/Caches/Homebrew/api
             ~/Library/Caches/Homebrew/downloads
-          key: homebrew-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('.github/homebrew/release-macos.txt') }}
+          key: homebrew-macos13-${{ matrix.arch }}-${{ hashFiles('.github/homebrew/release-macos13.txt') }}
 
       - name: Install build dependencies
         shell: bash
@@ -157,26 +135,94 @@ jobs:
           HOMEBREW_NO_INSTALL_CLEANUP: "1"
         run: |
           set -euo pipefail
-          BREW_PACKAGES="$(grep -Ev '^[[:space:]]*(#|$)' .github/homebrew/release-macos.txt | tr '\n' ' ')"
+          BREW_PACKAGES="$(grep -Ev '^[[:space:]]*(#|$)' .github/homebrew/release-macos13.txt | tr '\n' ' ')"
           brew install ${BREW_PACKAGES}
-          echo "$(brew --prefix qt)/bin" >> "$GITHUB_PATH"
+
+      - name: Create vcpkg binary cache directory
+        shell: bash
+        run: mkdir -p "${VCPKG_DEFAULT_BINARY_CACHE}"
+
+      - name: Restore from cache and setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgJsonGlob: "vcpkg.json"
+          vcpkgGitCommitId: "b2cb0da531c2f1f740045bfe7c4dac59f0b2b69c"
+
+      - name: Prepare vcpkg paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          VCPKG_INSTALLED_DIR="${GITHUB_WORKSPACE}/vcpkg_installed/macos13/${{ matrix.arch }}"
+          VCPKG_QT_TOOLS_DIR="${VCPKG_INSTALLED_DIR}/${{ matrix.vcpkg_host_triplet }}/tools/Qt6/bin"
+          mkdir -p "${VCPKG_INSTALLED_DIR}" "${VCPKG_DEFAULT_BINARY_CACHE}"
+          echo "VCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR}" >> "$GITHUB_ENV"
+          echo "VCPKG_QT_TOOLS_DIR=${VCPKG_QT_TOOLS_DIR}" >> "$GITHUB_ENV"
+
+      - name: Build vcpkg dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          "${_VCPKG_}/vcpkg" install \
+            --clean-buildtrees-after-build \
+            --clean-packages-after-build \
+            --x-manifest-root="${GITHUB_WORKSPACE}" \
+            --x-install-root="${VCPKG_INSTALLED_DIR}" \
+            --overlay-triplets="${VCPKG_OVERLAY_TRIPLETS}" \
+            --triplet="${{ matrix.vcpkg_triplet }}" \
+            --host-triplet="${{ matrix.vcpkg_host_triplet }}"
+
+      - name: Resolve Qt deployment tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          QT_PATHS=""
+          if [[ -x "${VCPKG_QT_TOOLS_DIR}/qtpaths6" ]]; then
+            QT_PATHS="${VCPKG_QT_TOOLS_DIR}/qtpaths6"
+          else
+            QT_PATHS="${VCPKG_QT_TOOLS_DIR}/qtpaths"
+          fi
+          [[ -x "${QT_PATHS}" ]] || {
+            echo "qtpaths not found under ${VCPKG_QT_TOOLS_DIR}" >&2
+            exit 1
+          }
+
+          MACDEPLOYQT=""
+          if [[ -x "${VCPKG_QT_TOOLS_DIR}/macdeployqt6" ]]; then
+            MACDEPLOYQT="${VCPKG_QT_TOOLS_DIR}/macdeployqt6"
+          else
+            MACDEPLOYQT="${VCPKG_QT_TOOLS_DIR}/macdeployqt"
+          fi
+          [[ -x "${MACDEPLOYQT}" ]] || {
+            echo "macdeployqt not found under ${VCPKG_QT_TOOLS_DIR}" >&2
+            exit 1
+          }
+
+          echo "QT_PATHS_EXECUTABLE=${QT_PATHS}" >> "$GITHUB_ENV"
+          echo "MACDEPLOYQT_EXECUTABLE=${MACDEPLOYQT}" >> "$GITHUB_ENV"
 
       - name: Configure app CMake
         shell: bash
         run: |
           set -euo pipefail
           rm -rf build
-          QT_PREFIX="$(brew --prefix qt)"
-          OPENCV_PREFIX="$(brew --prefix opencv)"
           cmake -B build -S . -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_APPLE_APP=ON \
             -DBUILD_TESTING=OFF \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET="${{ needs.prepare.outputs.macos_deployment_target }}" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="${PLATYPUS_MACOS_DEPLOYMENT_TARGET}" \
             -DCMAKE_OSX_ARCHITECTURES="${{ matrix.cmake_arch }}" \
             -DPLATYPUS_PACKAGE_VERSION_OVERRIDE="${{ needs.prepare.outputs.package_version }}" \
-            -DCMAKE_PREFIX_PATH="${QT_PREFIX};${OPENCV_PREFIX}" \
-            -DOpenCV_DIR="${OPENCV_PREFIX}/lib/cmake/opencv4"
+            -DCMAKE_TOOLCHAIN_FILE="${_VCPKG_}/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_MANIFEST_MODE=OFF \
+            -DVCPKG_OVERLAY_TRIPLETS="${VCPKG_OVERLAY_TRIPLETS}" \
+            -DVCPKG_INSTALLED_DIR="${VCPKG_INSTALLED_DIR}" \
+            -DVCPKG_TARGET_TRIPLET="${{ matrix.vcpkg_triplet }}" \
+            -DVCPKG_HOST_TRIPLET="${{ matrix.vcpkg_host_triplet }}" \
+            -DCMAKE_PREFIX_PATH="${VCPKG_INSTALLED_DIR}/${{ matrix.vcpkg_triplet }}" \
+            -DQt6_DIR="${VCPKG_INSTALLED_DIR}/${{ matrix.vcpkg_triplet }}/share/Qt6" \
+            -DOpenCV_DIR="${VCPKG_INSTALLED_DIR}/${{ matrix.vcpkg_triplet }}/share/opencv4" \
+            -DMACDEPLOYQT_EXECUTABLE="${MACDEPLOYQT_EXECUTABLE}" \
+            -DQT_PATHS_EXECUTABLE="${QT_PATHS_EXECUTABLE}"
 
       - name: Build PlatypusGui
         shell: bash
@@ -214,17 +260,24 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf build-photoshop
-          QT_PREFIX="$(brew --prefix qt)"
-          OPENCV_PREFIX="$(brew --prefix opencv)"
           cmake -B build-photoshop -S . -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_PHOTOSHOP_PLUGIN=ON \
             -DBUILD_TESTING=OFF \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET="${{ needs.prepare.outputs.macos_deployment_target }}" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="${PLATYPUS_MACOS_DEPLOYMENT_TARGET}" \
             -DCMAKE_OSX_ARCHITECTURES="${{ matrix.cmake_arch }}" \
             -DPLATYPUS_PACKAGE_VERSION_OVERRIDE="${{ needs.prepare.outputs.package_version }}" \
-            -DCMAKE_PREFIX_PATH="${QT_PREFIX};${OPENCV_PREFIX}" \
-            -DOpenCV_DIR="${OPENCV_PREFIX}/lib/cmake/opencv4"
+            -DCMAKE_TOOLCHAIN_FILE="${_VCPKG_}/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_MANIFEST_MODE=OFF \
+            -DVCPKG_OVERLAY_TRIPLETS="${VCPKG_OVERLAY_TRIPLETS}" \
+            -DVCPKG_INSTALLED_DIR="${VCPKG_INSTALLED_DIR}" \
+            -DVCPKG_TARGET_TRIPLET="${{ matrix.vcpkg_triplet }}" \
+            -DVCPKG_HOST_TRIPLET="${{ matrix.vcpkg_host_triplet }}" \
+            -DCMAKE_PREFIX_PATH="${VCPKG_INSTALLED_DIR}/${{ matrix.vcpkg_triplet }}" \
+            -DQt6_DIR="${VCPKG_INSTALLED_DIR}/${{ matrix.vcpkg_triplet }}/share/Qt6" \
+            -DOpenCV_DIR="${VCPKG_INSTALLED_DIR}/${{ matrix.vcpkg_triplet }}/share/opencv4" \
+            -DMACDEPLOYQT_EXECUTABLE="${MACDEPLOYQT_EXECUTABLE}" \
+            -DQT_PATHS_EXECUTABLE="${QT_PATHS_EXECUTABLE}"
 
       - name: Build Photoshop release payload
         shell: bash
@@ -421,7 +474,7 @@ jobs:
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-${{ matrix.arch }}-release
+          name: macos13-${{ matrix.arch }}-release
           path: |
             build/release/${{ matrix.arch }}/${{ matrix.dmg_name }}
             build/release/${{ matrix.arch }}/${{ matrix.checksum_name }}
@@ -440,7 +493,7 @@ jobs:
           fi
 
   publish:
-    name: Publish GitHub Release
+    name: Upload macOS 13 release assets
     needs:
       - prepare
       - build
@@ -449,17 +502,12 @@ jobs:
       GH_TOKEN: ${{ github.token }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.prepare.outputs.target_sha }}
-
       - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
 
-      - name: Create GitHub Release
+      - name: Upload assets to existing GitHub Release
         shell: bash
         run: |
           set -euo pipefail
@@ -469,13 +517,4 @@ jobs:
             echo "No release artifacts were downloaded." >&2
             exit 1
           fi
-          RELEASE_ARGS=()
-          if [[ "${{ github.event.inputs.prerelease }}" == "true" ]]; then
-            RELEASE_ARGS+=(--prerelease)
-          fi
-          gh release create "$TAG" \
-            "${RELEASE_FILES[@]}" \
-            --target "${{ needs.prepare.outputs.target_sha }}" \
-            --title "$TAG" \
-            --generate-notes \
-            "${RELEASE_ARGS[@]}"
+          gh release upload "$TAG" "${RELEASE_FILES[@]}" --clobber

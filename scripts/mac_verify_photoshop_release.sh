@@ -11,6 +11,8 @@ Options:
   --phase <phase>          Verification phase to run.
   --payload-dir <path>     Path to the staged Photoshop payload directory.
   --dmg <path>             Path to the DMG for post-staple checks.
+  --deployment-target <version>
+                           Maximum macOS minimum-version allowed in bundled Mach-O files.
   --report-dir <path>      Output directory for verification logs.
   -h, --help               Show this help text.
 EOF
@@ -18,10 +20,15 @@ EOF
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+ENV_FILE="${REPO_ROOT}/.env"
+source "${SCRIPT_DIR}/mac_verify_common.sh"
+
+load_repo_env "${ENV_FILE}"
 
 PHASE=""
 PAYLOAD_DIR=""
 DMG_PATH=""
+DEPLOYMENT_TARGET="${PLATYPUS_MACOS_DEPLOYMENT_TARGET:-}"
 REPORT_DIR="build/mac-photoshop-verification"
 FAILURES=0
 
@@ -40,6 +47,11 @@ while [[ $# -gt 0 ]]; do
     --dmg)
       [[ $# -ge 2 ]] || { echo "Missing value for $1" >&2; exit 1; }
       DMG_PATH="$2"
+      shift 2
+      ;;
+    --deployment-target)
+      [[ $# -ge 2 ]] || { echo "Missing value for $1" >&2; exit 1; }
+      DEPLOYMENT_TARGET="$2"
       shift 2
       ;;
     --report-dir)
@@ -245,6 +257,36 @@ check_dependency_paths() {
       -type f \( -name '*.dylib' -o -name '*.so' -o -perm -111 \) -print0 | sort -z)
 }
 
+check_bundle_deployment_target() {
+  local bundle_path="$1"
+  local log_name="$2"
+  local target_version="$3"
+  local log_file="${REPORT_DIR}/${log_name}.log"
+  local checked_count=0
+  local binary_path=""
+  local minos=""
+
+  : >"${log_file}"
+
+  while IFS= read -r -d '' binary_path; do
+    checked_count=$((checked_count + 1))
+    minos="$(extract_minos "${binary_path}")" || {
+      echo "Unable to determine minimum macOS version for ${binary_path}" >>"${log_file}"
+      return 1
+    }
+    printf '%s minos %s\n' "${binary_path}" "${minos}" >>"${log_file}"
+    if version_gt "${minos}" "${target_version}"; then
+      echo "Binary requires macOS ${minos}, above requested target ${target_version}: ${binary_path}" >>"${log_file}"
+      return 1
+    fi
+  done < <(collect_bundle_macho_files "${bundle_path}")
+
+  if [[ "${checked_count}" -eq 0 ]]; then
+    echo "No Mach-O files found in ${bundle_path}" >>"${log_file}"
+    return 1
+  fi
+}
+
 check_dmg_contents() {
   local mount_dir
   mount_dir="$(mktemp -d "${TMPDIR:-/tmp}/platypus-photoshop-dmg.XXXXXX")"
@@ -269,6 +311,10 @@ run_check plugin-signature check_bundle_signature_metadata "${PLUGIN_PATH}" plug
 run_check plugin-nested-codesign check_nested_code_signatures "${PLUGIN_PATH}" plugin-nested-codesign
 run_check plugin-entitlements check_release_entitlements "${PLUGIN_PATH}" plugin
 run_check plugin-dependency-paths check_dependency_paths "${PLUGIN_PATH}" plugin-otool-main-executable
+if [[ -n "${DEPLOYMENT_TARGET}" ]]; then
+  run_check app-deployment-target check_bundle_deployment_target "${APP_PATH}" app-deployment-target "${DEPLOYMENT_TARGET}"
+  run_check plugin-deployment-target check_bundle_deployment_target "${PLUGIN_PATH}" plugin-deployment-target "${DEPLOYMENT_TARGET}"
+fi
 
 if [[ "${PHASE}" == "post-staple" ]]; then
   if [[ ! -f "${DMG_PATH}" ]]; then

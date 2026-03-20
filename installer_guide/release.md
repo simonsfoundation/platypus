@@ -65,6 +65,42 @@ gh release view v0.1.0
 gh release download v0.1.0 --dir /tmp/platypus-release-check
 ```
 
+## macOS 13 Compatibility Release
+
+The macOS 13 compatibility workflow is
+[`release-macos13.yml`](../.github/workflows/release-macos13.yml).
+It is a separate `workflow_dispatch` workflow that builds macOS 13-compatible
+artifacts on current GitHub macOS runners using the repo's `vcpkg` manifest
+path instead of Homebrew `qt` and `opencv`.
+
+This workflow does not create the GitHub Release. Run the normal macOS release
+workflow first so the tag and release already exist, then add the compatibility
+assets with:
+
+```bash
+gh workflow run release-macos13.yml \
+  --ref main \
+  -f tag=v0.1.0
+```
+
+Watch the run:
+
+```bash
+gh run list --workflow release-macos13.yml --limit 5
+gh run watch <run-id>
+```
+
+The compatibility workflow uploads these extra assets to the existing release:
+
+- `Platypus-macos13-arm64.dmg`
+- `Platypus-macos13-arm64.sha256`
+- `Platypus-macos13-x86_64.dmg`
+- `Platypus-macos13-x86_64.sha256`
+- `Platypus-photoshop-macos13-arm64.dmg`
+- `Platypus-photoshop-macos13-arm64.sha256`
+- `Platypus-photoshop-macos13-x86_64.dmg`
+- `Platypus-photoshop-macos13-x86_64.sha256`
+
 ## Windows Release
 
 The Windows workflow is

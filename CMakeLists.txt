@@ -24,6 +24,10 @@ set(PHOTOSHOP_PLUGIN_INSTALL_DIR "" CACHE PATH
     "Optional Photoshop Plug-ins directory to install Platypus into")
 set(PLATYPUS_OPENCV_COMPONENTS core imgproc imgcodecs flann)
 option(OpenCV_DIR "Path to OpenCV if not found automatically" "")
+set(MACDEPLOYQT_EXECUTABLE "" CACHE FILEPATH
+    "Path to macdeployqt used for macOS bundle deployment")
+set(QT_PATHS_EXECUTABLE "" CACHE FILEPATH
+    "Path to qtpaths or qtpaths6 used for macOS Qt plugin discovery")
 set(PLATYPUS_PACKAGE_VERSION_OVERRIDE "" CACHE STRING
     "Override the version string used for packaged release artifacts")
 
@@ -249,13 +253,52 @@ if (NOT PLATYPUS_BUILD_MAC_APP)
 endif()
 
 if (APPLE AND PLATYPUS_BUILD_MAC_APP)
+  set(_platypus_qt_tool_hints "")
+  list(APPEND _platypus_qt_tool_hints
+       "${Qt6_DIR}/../../../bin"
+       "${Qt6_DIR}/../../bin")
+
+  if (DEFINED QT_HOST_PATH)
+    list(APPEND _platypus_qt_tool_hints
+         "${QT_HOST_PATH}/bin"
+         "${QT_HOST_PATH}/tools/Qt6/bin")
+  endif()
+
+  if (DEFINED QT_HOST_PATH_CMAKE_DIR)
+    list(APPEND _platypus_qt_tool_hints
+         "${QT_HOST_PATH_CMAKE_DIR}/../bin"
+         "${QT_HOST_PATH_CMAKE_DIR}/../tools/Qt6/bin")
+  endif()
+
+  foreach(prefix IN LISTS CMAKE_PREFIX_PATH)
+    list(APPEND _platypus_qt_tool_hints
+         "${prefix}/bin"
+         "${prefix}/tools/Qt6/bin")
+  endforeach()
+
+  if (DEFINED VCPKG_INSTALLED_DIR)
+    if (DEFINED VCPKG_HOST_TRIPLET)
+      list(APPEND _platypus_qt_tool_hints
+           "${VCPKG_INSTALLED_DIR}/${VCPKG_HOST_TRIPLET}/tools/Qt6/bin")
+    endif()
+    if (DEFINED VCPKG_TARGET_TRIPLET)
+      list(APPEND _platypus_qt_tool_hints
+           "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/tools/Qt6/bin")
+    endif()
+  endif()
+
+  list(REMOVE_DUPLICATES _platypus_qt_tool_hints)
+
+  if (NOT QT_PATHS_EXECUTABLE)
+    find_program(QT_PATHS_EXECUTABLE
+        NAMES qtpaths6 qtpaths
+        HINTS ${_platypus_qt_tool_hints})
+  endif()
+
   if (NOT MACDEPLOYQT_EXECUTABLE)
     find_program(MACDEPLOYQT_EXECUTABLE
-        NAMES macdeployqt
-        HINTS
-          "${Qt6_DIR}/../../../bin"
-          "${Qt6_DIR}/../../bin"
-          "${CMAKE_PREFIX_PATH}/bin")
+        NAMES macdeployqt macdeployqt6
+        HINTS ${_platypus_qt_tool_hints})
   endif()
   if (NOT MACDEPLOYQT_EXECUTABLE)
     message(FATAL_ERROR
@@ -269,6 +312,13 @@ if (APPLE AND PLATYPUS_BUILD_MAC_APP)
       list(APPEND PLATYPUS_BUNDLE_FIXUP_DIRS "${prefix}/lib")
     endif()
   endforeach()
+
+  if (DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+    if (EXISTS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib")
+      list(APPEND PLATYPUS_BUNDLE_FIXUP_DIRS
+           "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib")
+    endif()
+  endif()
 
   if (OpenCV_DIR)
     get_filename_component(_platypus_opencv_prefix "${OpenCV_DIR}/../../.." ABSOLUTE)
@@ -324,10 +374,40 @@ if (APPLE AND PLATYPUS_BUILD_MAC_APP)
   list(REMOVE_DUPLICATES PLATYPUS_BUNDLE_FIXUP_DIRS)
   list(JOIN PLATYPUS_BUNDLE_FIXUP_DIRS ";" PLATYPUS_BUNDLE_FIXUP_DIRS_JOINED)
 
-  if (EXISTS "${_platypus_qt_prefix}/share/qt/plugins")
-    set(PLATYPUS_QT_PLUGIN_DIR "${_platypus_qt_prefix}/share/qt/plugins")
-  else()
-    set(PLATYPUS_QT_PLUGIN_DIR "${_platypus_qt_real_prefix}/share/qt/plugins")
+  set(PLATYPUS_QT_PLUGIN_DIR "")
+  if (QT_PATHS_EXECUTABLE)
+    execute_process(
+      COMMAND "${QT_PATHS_EXECUTABLE}" --query QT_INSTALL_PLUGINS
+      RESULT_VARIABLE _platypus_qtpaths_result
+      OUTPUT_VARIABLE _platypus_qtpaths_output
+      ERROR_VARIABLE _platypus_qtpaths_error
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if (_platypus_qtpaths_result EQUAL 0 AND
+        EXISTS "${_platypus_qtpaths_output}")
+      set(PLATYPUS_QT_PLUGIN_DIR "${_platypus_qtpaths_output}")
+    endif()
+  endif()
+
+  if (NOT PLATYPUS_QT_PLUGIN_DIR)
+    foreach(_platypus_qt_plugin_candidate
+            IN ITEMS
+              "${_platypus_qt_prefix}/share/qt/plugins"
+              "${_platypus_qt_real_prefix}/share/qt/plugins"
+              "${_platypus_qt_prefix}/plugins"
+              "${_platypus_qt_real_prefix}/plugins"
+              "${_platypus_qt_prefix}/Qt6/plugins"
+              "${_platypus_qt_real_prefix}/Qt6/plugins")
+      if (EXISTS "${_platypus_qt_plugin_candidate}")
+        set(PLATYPUS_QT_PLUGIN_DIR "${_platypus_qt_plugin_candidate}")
+        break()
+      endif()
+    endforeach()
+  endif()
+
+  if (NOT PLATYPUS_QT_PLUGIN_DIR)
+    message(FATAL_ERROR
+        "Qt plugin directory could not be determined.\n"
+        "  Set -DQT_PATHS_EXECUTABLE=/path/to/qtpaths or ensure qtpaths is available.")
   endif()
   set(PLATYPUS_QT_PLUGIN_FILES
       "platforms/libqcocoa.dylib"

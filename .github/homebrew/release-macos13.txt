@@ -1,0 +1,7 @@
+ninja
+pkg-config
+nasm
+autoconf
+autoconf-archive
+automake
+libtool
