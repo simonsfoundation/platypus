@@ -1,0 +1,244 @@
+name: Release macOS Combined
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: release-macos-combined-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build and publish macOS release
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Validate tag and derive release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          if [[ ! "$TAG" =~ ^v[0-9]+(\.[0-9]+)*([.-][A-Za-z0-9._-]+)?$ ]]; then
+            echo "Release tag must look like v0.1.0 or v0.1.0-rc1" >&2
+            exit 1
+          fi
+
+          PRERELEASE=false
+          if [[ "$TAG" == *-* ]]; then
+            PRERELEASE=true
+          fi
+
+          REQUEST_ID="mac-release-${GITHUB_RUN_ID}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "target_sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
+          echo "request_id=${REQUEST_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch standard macOS workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run release-macos.yml \
+            --ref "${{ steps.meta.outputs.tag }}" \
+            -f tag="${{ steps.meta.outputs.tag }}" \
+            -f target_ref="${{ steps.meta.outputs.tag }}" \
+            -f prerelease="${{ steps.meta.outputs.prerelease }}" \
+            -f publish_release=false \
+            -f release_request_id="${{ steps.meta.outputs.request_id }}"
+
+      - name: Dispatch macOS 13 workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run release-macos13.yml \
+            --ref "${{ steps.meta.outputs.tag }}" \
+            -f tag="${{ steps.meta.outputs.tag }}" \
+            -f publish_release=false \
+            -f release_request_id="${{ steps.meta.outputs.request_id }}"
+
+      - name: Resolve dispatched workflow run ids
+        id: runs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          find_run_id() {
+            local workflow_file="$1"
+            local label="$2"
+            local run_id=""
+            local json=""
+
+            for attempt in $(seq 1 60); do
+              json="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_file}/runs?event=workflow_dispatch&per_page=30")"
+              run_id="$(jq -r \
+                --arg sha "${{ steps.meta.outputs.target_sha }}" \
+                --arg req "${{ steps.meta.outputs.request_id }}" \
+                '.workflow_runs[]
+                | select(.head_sha == $sha)
+                | select(((.display_title // "") | contains($req)))
+                | .id' <<<"${json}" | head -n1)"
+
+              if [[ -n "${run_id}" ]]; then
+                echo "Resolved ${label} run id: ${run_id}" >&2
+                printf '%s\n' "${run_id}"
+                return 0
+              fi
+
+              sleep 10
+            done
+
+            echo "Unable to locate ${label} run for request ${{ steps.meta.outputs.request_id }}" >&2
+            return 1
+          }
+
+          MACOS_RUN_ID="$(find_run_id "release-macos.yml" "Release macOS")"
+          MACOS13_RUN_ID="$(find_run_id "release-macos13.yml" "Release macOS 13 Compatibility")"
+
+          echo "macos_run_id=${MACOS_RUN_ID}" >> "$GITHUB_OUTPUT"
+          echo "macos13_run_id=${MACOS13_RUN_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for standard macOS workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RUN_ID="${{ steps.runs.outputs.macos_run_id }}"
+          LABEL="Release macOS"
+
+          for attempt in $(seq 1 720); do
+            RUN_JSON="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}")"
+            STATUS="$(jq -r '.status' <<<"${RUN_JSON}")"
+            CONCLUSION="$(jq -r '.conclusion // ""' <<<"${RUN_JSON}")"
+            URL="$(jq -r '.html_url' <<<"${RUN_JSON}")"
+
+            echo "${LABEL}: status=${STATUS} conclusion=${CONCLUSION:-pending} url=${URL}"
+
+            if [[ "${STATUS}" == "completed" ]]; then
+              if [[ "${CONCLUSION}" == "success" ]]; then
+                exit 0
+              fi
+              echo "${LABEL} did not succeed: ${URL}" >&2
+              exit 1
+            fi
+
+            sleep 30
+          done
+
+          echo "${LABEL} timed out waiting for completion" >&2
+          exit 1
+
+      - name: Wait for macOS 13 workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RUN_ID="${{ steps.runs.outputs.macos13_run_id }}"
+          LABEL="Release macOS 13 Compatibility"
+
+          for attempt in $(seq 1 720); do
+            RUN_JSON="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}")"
+            STATUS="$(jq -r '.status' <<<"${RUN_JSON}")"
+            CONCLUSION="$(jq -r '.conclusion // ""' <<<"${RUN_JSON}")"
+            URL="$(jq -r '.html_url' <<<"${RUN_JSON}")"
+
+            echo "${LABEL}: status=${STATUS} conclusion=${CONCLUSION:-pending} url=${URL}"
+
+            if [[ "${STATUS}" == "completed" ]]; then
+              if [[ "${CONCLUSION}" == "success" ]]; then
+                exit 0
+              fi
+              echo "${LABEL} did not succeed: ${URL}" >&2
+              exit 1
+            fi
+
+            sleep 30
+          done
+
+          echo "${LABEL} timed out waiting for completion" >&2
+          exit 1
+
+      - name: Download macOS build artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir -p dist/macos dist/macos13
+          gh run download "${{ steps.runs.outputs.macos_run_id }}" --dir dist/macos
+          gh run download "${{ steps.runs.outputs.macos13_run_id }}" --dir dist/macos13
+
+      - name: Validate required macOS assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          REQUIRED_FILES=(
+            Platypus-macos-arm64.dmg
+            Platypus-macos-arm64.sha256
+            Platypus-macos-x86_64.dmg
+            Platypus-macos-x86_64.sha256
+            Platypus-photoshop-macos-arm64.dmg
+            Platypus-photoshop-macos-arm64.sha256
+            Platypus-photoshop-macos-x86_64.dmg
+            Platypus-photoshop-macos-x86_64.sha256
+            Platypus-macos13-arm64.dmg
+            Platypus-macos13-arm64.sha256
+            Platypus-macos13-x86_64.dmg
+            Platypus-macos13-x86_64.sha256
+            Platypus-photoshop-macos13-arm64.dmg
+            Platypus-photoshop-macos13-arm64.sha256
+            Platypus-photoshop-macos13-x86_64.dmg
+            Platypus-photoshop-macos13-x86_64.sha256
+          )
+
+          : > release-files.txt
+          for filename in "${REQUIRED_FILES[@]}"; do
+            filepath="$(find dist -type f -name "${filename}" | head -n1)"
+            if [[ -z "${filepath}" ]]; then
+              echo "Missing required macOS asset: ${filename}" >&2
+              exit 1
+            fi
+            printf '%s\n' "${filepath}" >> release-files.txt
+          done
+
+          sort -o release-files.txt release-files.txt
+          echo "Validated macOS release asset set:"
+          cat release-files.txt
+
+      - name: Create or update GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.meta.outputs.tag }}"
+          mapfile -t RELEASE_FILES < release-files.txt
+
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${TAG}" "${RELEASE_FILES[@]}" --clobber --repo "${GITHUB_REPOSITORY}"
+            exit 0
+          fi
+
+          RELEASE_ARGS=()
+          if [[ "${{ steps.meta.outputs.prerelease }}" == "true" ]]; then
+            RELEASE_ARGS+=(--prerelease)
+          fi
+
+          if gh release create "${TAG}" \
+            "${RELEASE_FILES[@]}" \
+            --target "${{ steps.meta.outputs.target_sha }}" \
+            --title "${TAG}" \
+            --generate-notes \
+            --repo "${GITHUB_REPOSITORY}" \
+            "${RELEASE_ARGS[@]}"; then
+            exit 0
+          fi
+
+          echo "Release creation failed, retrying as upload in case another workflow created it first." >&2
+          gh release upload "${TAG}" "${RELEASE_FILES[@]}" --clobber --repo "${GITHUB_REPOSITORY}"

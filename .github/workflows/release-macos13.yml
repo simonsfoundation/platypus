@@ -1,4 +1,8 @@
 name: Release macOS 13 Compatibility
+run-name: >-
+  Release macOS 13 Compatibility ${{ github.event.inputs.tag }}
+  publish=${{ github.event.inputs.publish_release }}
+  request=${{ github.event.inputs.release_request_id || 'manual' }}
 
 on:
   workflow_dispatch:
@@ -6,6 +10,16 @@ on:
       tag:
         description: Existing release tag to augment with macOS 13-compatible artifacts
         required: true
+        type: string
+      publish_release:
+        description: Publish release assets to GitHub after building
+        required: false
+        default: true
+        type: boolean
+      release_request_id:
+        description: Internal coordinator correlation id
+        required: false
+        default: ""
         type: string
 
 permissions:
@@ -68,6 +82,7 @@ jobs:
           echo "sha=${TARGET_SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Ensure release exists
+        if: ${{ github.event.inputs.publish_release == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -564,6 +579,7 @@ jobs:
 
   publish:
     name: Upload macOS 13 release assets
+    if: ${{ github.event.inputs.publish_release == 'true' }}
     needs:
       - prepare
       - build

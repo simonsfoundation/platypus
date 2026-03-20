@@ -24,31 +24,84 @@ gh repo set-default simonsfoundation/platypus
 
 ## macOS Release
 
-The macOS release workflow is [`release-macos.yml`](../.github/workflows/release-macos.yml).
-It is a `workflow_dispatch` workflow and expects:
+The official macOS release entrypoint is
+[`release-macos-combined.yml`](../.github/workflows/release-macos-combined.yml).
+It runs automatically on `push` to tags matching `v*` and treats both the
+standard macOS artifacts and the macOS 13-compatible artifacts as required for
+the release.
+
+Create and push the tag:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+That tag push starts the combined macOS release workflow, which dispatches both
+of the standalone build pipelines and publishes the GitHub Release only after
+all required macOS assets are present.
+
+Watch the combined run:
+
+```bash
+gh run list --workflow release-macos-combined.yml --limit 5
+gh run watch <run-id>
+```
+
+Inspect the resulting release:
+
+```bash
+gh release view v0.1.0
+gh release download v0.1.0 --dir /tmp/platypus-release-check
+```
+
+## macOS Standalone Workflow
+
+The standard macOS build workflow is
+[`release-macos.yml`](../.github/workflows/release-macos.yml). It remains
+available as a `workflow_dispatch` workflow for debugging or as an explicit
+manual escape hatch.
+
+It expects:
 
 - `tag`
 - `target_ref`
 - `prerelease`
+- `publish_release`
+- `release_request_id`
 
-Run it with:
+Run it in normal publish mode with:
 
 ```bash
 gh workflow run release-macos.yml \
   --ref main \
   -f tag=v0.1.0 \
   -f target_ref=main \
-  -f prerelease=false
+  -f prerelease=false \
+  -f publish_release=true
 ```
 
-For a prerelease from a branch or commit:
+Run it in build-only mode, without publishing release assets:
+
+```bash
+gh workflow run release-macos.yml \
+  --ref main \
+  -f tag=v0.1.0 \
+  -f target_ref=main \
+  -f prerelease=false \
+  -f publish_release=false \
+  -f release_request_id=debug
+```
+
+For a prerelease from a branch or commit in publish mode:
 
 ```bash
 gh workflow run release-macos.yml \
   --ref main \
   -f tag=v0.1.0-rc1 \
   -f target_ref=<branch-or-sha> \
-  -f prerelease=true
+  -f prerelease=true \
+  -f publish_release=true
 ```
 
 Watch the run:
@@ -68,17 +121,33 @@ gh release download v0.1.0 --dir /tmp/platypus-release-check
 ## macOS 13 Compatibility Release
 
 The macOS 13 compatibility workflow is
-[`release-macos13.yml`](../.github/workflows/release-macos13.yml).
-It is a separate `workflow_dispatch` workflow for publishing macOS 13-compatible
-artifacts. If the GitHub Release does not exist yet, this workflow creates it
-before uploading the macOS 13 assets.
+[`release-macos13.yml`](../.github/workflows/release-macos13.yml). It is a
+separate `workflow_dispatch` workflow for debugging or manually publishing the
+macOS 13-compatible artifacts outside the normal combined tag-push flow.
 
-Use it like this:
+It expects:
+
+- `tag`
+- `publish_release`
+- `release_request_id`
+
+Use it in normal publish mode like this:
 
 ```bash
 gh workflow run release-macos13.yml \
   --ref main \
-  -f tag=v0.1.0
+  -f tag=v0.1.0 \
+  -f publish_release=true
+```
+
+Use it in build-only mode like this:
+
+```bash
+gh workflow run release-macos13.yml \
+  --ref main \
+  -f tag=v0.1.0 \
+  -f publish_release=false \
+  -f release_request_id=debug
 ```
 
 Watch the run:
@@ -142,18 +211,13 @@ gh release download v0.1.0 --dir /tmp/platypus-release-check
 
 ## Current Limitation
 
-The current workflows are not coordinated around a shared GitHub Release.
+The macOS workflows are now coordinated around the combined macOS tag-push
+workflow, but the Windows workflow still independently calls `gh release
+create`.
 
-- The macOS workflow creates the GitHub Release itself.
-- The Windows workflow also calls `gh release create`.
-
-That means both workflows cannot successfully be the first publisher for the
-same tag. The second workflow to reach its publish step will fail because the
-release already exists.
-
-As the repo stands today, treat one workflow as the release creator for a given
-tag and expect the other workflow to need follow-up changes before both can
-publish cleanly to the same release automatically.
+That means the Windows workflow may still fail if the macOS release has already
+created the GitHub Release for the same tag. macOS publishing is coordinated;
+Windows release creation is still a separate concern.
 
 ## Useful `gh` Commands
 

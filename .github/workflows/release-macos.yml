@@ -1,4 +1,8 @@
 name: Release macOS
+run-name: >-
+  Release macOS ${{ github.event.inputs.tag }}
+  publish=${{ github.event.inputs.publish_release }}
+  request=${{ github.event.inputs.release_request_id || 'manual' }}
 
 on:
   workflow_dispatch:
@@ -17,6 +21,16 @@ on:
         required: false
         default: false
         type: boolean
+      publish_release:
+        description: Publish release assets to GitHub after building
+        required: false
+        default: true
+        type: boolean
+      release_request_id:
+        description: Internal coordinator correlation id
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: write
@@ -71,6 +85,7 @@ jobs:
           echo "sha=${TARGET_SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Check for existing release
+        if: ${{ github.event.inputs.publish_release == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -81,6 +96,7 @@ jobs:
           fi
 
       - name: Create tag if needed
+        if: ${{ github.event.inputs.publish_release == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -414,6 +430,7 @@ jobs:
 
   publish:
     name: Publish GitHub Release
+    if: ${{ github.event.inputs.publish_release == 'true' }}
     needs:
       - prepare
       - build
