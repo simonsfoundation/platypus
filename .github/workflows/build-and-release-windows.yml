@@ -117,7 +117,7 @@ jobs:
             -SigningMetadataPath build\trusted-signing-metadata.json
 
       - name: Upload Installer Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: platypus-windows-installer
           path: |

@@ -48,6 +48,7 @@ jobs:
         run: |
           set -euo pipefail
           gh workflow run release-macos.yml \
+            --repo "${GITHUB_REPOSITORY}" \
             --ref "${{ steps.meta.outputs.tag }}" \
             -f tag="${{ steps.meta.outputs.tag }}" \
             -f target_ref="${{ steps.meta.outputs.tag }}" \
@@ -60,6 +61,7 @@ jobs:
         run: |
           set -euo pipefail
           gh workflow run release-macos13.yml \
+            --repo "${GITHUB_REPOSITORY}" \
             --ref "${{ steps.meta.outputs.tag }}" \
             -f tag="${{ steps.meta.outputs.tag }}" \
             -f publish_release=false \
@@ -172,8 +174,8 @@ jobs:
           set -euo pipefail
           rm -rf dist
           mkdir -p dist/macos dist/macos13
-          gh run download "${{ steps.runs.outputs.macos_run_id }}" --dir dist/macos
-          gh run download "${{ steps.runs.outputs.macos13_run_id }}" --dir dist/macos13
+          gh run download "${{ steps.runs.outputs.macos_run_id }}" --dir dist/macos --repo "${GITHUB_REPOSITORY}"
+          gh run download "${{ steps.runs.outputs.macos13_run_id }}" --dir dist/macos13 --repo "${GITHUB_REPOSITORY}"
 
       - name: Validate required macOS assets
         shell: bash
