@@ -151,7 +151,7 @@ jobs:
       - name: Restore from cache and setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgJsonGlob: "vcpkg.json"
+          vcpkgJsonGlob: ".github/vcpkg-manifests/macos13/vcpkg.json"
           vcpkgGitCommitId: "c21f78db5a402441bfc8052462233a2aff079ac0"
 
       - name: Prepare vcpkg paths
@@ -172,7 +172,7 @@ jobs:
           set -euo pipefail
           if "${_VCPKG_}/vcpkg" install \
             --clean-buildtrees-after-build \
-            --x-manifest-root="${GITHUB_WORKSPACE}" \
+            --x-manifest-root="${GITHUB_WORKSPACE}/.github/vcpkg-manifests/macos13" \
             --x-install-root="${VCPKG_INSTALLED_DIR}" \
             --overlay-triplets="${VCPKG_OVERLAY_TRIPLETS}" \
             --triplet="${{ matrix.vcpkg_triplet }}" \

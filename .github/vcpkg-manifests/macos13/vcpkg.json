@@ -1,0 +1,37 @@
+{
+  "name": "platypus-macos13",
+  "version": "0.0.1",
+  "dependencies": [
+    {
+      "name": "opencv4",
+      "features": [
+        "eigen",
+        "ffmpeg",
+        "highgui",
+        "intrinsics",
+        "jpeg",
+        "png",
+        "tiff"
+      ]
+    },
+    {
+      "name": "libjpeg-turbo",
+      "features": [
+        "jpeg8"
+      ]
+    },
+    {
+      "name": "qtbase",
+      "features": [
+        "widgets",
+        "concurrent"
+      ]
+    },
+    {
+      "name": "qtsvg"
+    },
+    {
+      "name": "qttools"
+    }
+  ]
+}
