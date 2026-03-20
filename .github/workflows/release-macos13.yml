@@ -152,7 +152,7 @@ jobs:
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgJsonGlob: "vcpkg.json"
-          vcpkgGitCommitId: "b2cb0da531c2f1f740045bfe7c4dac59f0b2b69c"
+          vcpkgGitCommitId: "c21f78db5a402441bfc8052462233a2aff079ac0"
 
       - name: Prepare vcpkg paths
         shell: bash
