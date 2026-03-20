@@ -232,6 +232,15 @@ jobs:
           path: vcpkg-diagnostics/${{ matrix.arch }}
           if-no-files-found: warn
 
+      - name: Stash vcpkg dependencies
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos13-${{ matrix.arch }}-vcpkg-installed
+          path: vcpkg_installed/macos13/${{ matrix.arch }}
+          if-no-files-found: error
+          compression-level: 0
+
       - name: Resolve Qt deployment tools
         shell: bash
         run: |
@@ -578,4 +587,4 @@ jobs:
             echo "No release artifacts were downloaded." >&2
             exit 1
           fi
-          gh release upload "$TAG" "${RELEASE_FILES[@]}" --clobber
+          gh release upload "$TAG" "${RELEASE_FILES[@]}" --clobber --repo "${GITHUB_REPOSITORY}"
