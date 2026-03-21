@@ -32,8 +32,9 @@ protected:
 	bool saveAs();
 	bool doExport();
 
-	virtual bool eventFilter(QObject *object, QEvent *event);
-	virtual void closeEvent(QCloseEvent *event);
+    virtual void changeEvent(QEvent *event) override;
+	bool eventFilter(QObject *object, QEvent *event) override;
+	void closeEvent(QCloseEvent *event) override;
 
 private slots:
 	void onOpen();
@@ -85,12 +86,20 @@ private slots:
     void onAbout();
 
 private:
+    void refreshTheme();
+
 	Project *m_project;
 	class Viewer *m_viewer;
 	class ViewerScroller *m_scroller;
 	class UndoManager *m_undoMgr;
 	class Clipboard *m_clipboard;
 	class QTabBar *m_tabs;
+    class QWidget *m_modeStrip;
+    class QStackedWidget *m_contextStack;
+    class QWidget *m_markControls;
+    class QWidget *m_removeControls;
+    class QWidget *m_textureControls;
+    class QWidget *m_tonePanel;
     class QProgressBar *m_progressBar;
     class QPushButton *m_cancel;
 
@@ -123,16 +132,15 @@ private:
 	class QAction *m_doneAction;
 	class QAction *m_cancelAction;
 
-    class QAction *m_reset;
-
 	// tools
-	class QToolBar *m_viewerTools;
-	class QToolBar *m_tools;
+	class QWidget *m_primaryBar;
+    class QWidget *m_pluginControls;
 	class QAction *m_polygon;
 	class QAction *m_mask;
-	class QAction *m_overlay;
+    class QAction *m_overlay;
     class QAction *m_invert;
 	QList<QAction *> m_toolActions;
+    bool m_refreshingTheme;
 
 	bool m_pluginMode;
 };

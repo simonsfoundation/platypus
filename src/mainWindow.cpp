@@ -23,27 +23,276 @@
 #include <QtWidgets/QStatusBar>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QPushButton>
-#include <QtWidgets/QToolBar>
+#include <QtWidgets/QToolButton>
 #include <QtWidgets/QTabBar>
 #include <QtWidgets/QBoxLayout>
 #include <QtWidgets/QProgressBar>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QSizePolicy>
+#include <QtWidgets/QStackedWidget>
+#include <QtWidgets/QFrame>
 #include <QShortcut>
 #include <QtWidgets/QBoxLayout>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
 #include <QtGui/QDesktopServices>
+#include <QtWidgets/QStyle>
 #include <QtCore/QSettings>
 #include <QtCore/QLine>
 
 static const char *kProjectExtension = "platypus";
 
+namespace
+{
+QColor blendColors(const QColor &a, const QColor &b, qreal factor)
+{
+    const qreal inverse = 1.0 - factor;
+    return QColor::fromRgbF(a.redF() * inverse + b.redF() * factor,
+                            a.greenF() * inverse + b.greenF() * factor,
+                            a.blueF() * inverse + b.blueF() * factor,
+                            a.alphaF() * inverse + b.alphaF() * factor);
+}
+
+QString cssColor(const QColor &color)
+{
+    return color.name(QColor::HexArgb);
+}
+
+QString mainWindowStyleSheet(const QPalette &palette)
+{
+    const QColor window = palette.color(QPalette::Window);
+    const QColor base = palette.color(QPalette::Base);
+    const QColor text = palette.color(QPalette::WindowText);
+    const QColor highlight = palette.color(QPalette::Highlight);
+    const bool dark = window.lightness() < 140;
+
+    const QColor chrome = blendColors(window, base, dark ? 0.10 : 0.36);
+    const QColor chromeBorder = blendColors(text, window, dark ? 0.86 : 0.93);
+    const QColor contextPanel = blendColors(base, window, dark ? 0.16 : 0.06);
+    const QColor contextBorder = blendColors(text, window, dark ? 0.88 : 0.94);
+    const QColor toneTitle = blendColors(text, window, dark ? 0.30 : 0.46);
+    QColor hoverFill = blendColors(highlight, chrome, dark ? 0.78 : 0.64);
+    QColor selectedFill = highlight;
+    selectedFill.setAlpha(dark ? 52 : 28);
+    hoverFill.setAlpha(dark ? 36 : 24);
+
+    return QStringLiteral(R"(
+QWidget#mainWindowCentral {
+    background: %1;
+}
+
+QWidget#primaryBar {
+    background: %2;
+    border-bottom: 1px solid %3;
+}
+
+QFrame#headerDivider {
+    background: %3;
+    min-width: 1px;
+    max-width: 1px;
+    margin: 6px 0;
+}
+
+QToolButton#primaryButton {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 4px;
+}
+
+QToolButton#primaryButton:hover {
+    background: %9;
+    border-color: %5;
+}
+
+QToolButton#primaryButton:checked {
+    background: %8;
+    border-color: %7;
+}
+
+QWidget#modeStrip {
+    background: %2;
+    border-bottom: 1px solid %3;
+}
+
+QStackedWidget#contextStack {
+    background: transparent;
+}
+
+QTabBar#modeTabs::tab {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    margin: 0 4px 0 0;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+QTabBar#modeTabs::tab:selected {
+    background: %8;
+    border-color: %7;
+}
+
+QTabBar#modeTabs::tab:hover:!selected {
+    background: %9;
+}
+
+QToolButton#contextButton {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 3px 8px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+QToolButton#contextButton:hover {
+    background: %9;
+    border-color: %5;
+}
+
+QToolButton#contextButton:checked {
+    background: %8;
+    border-color: %7;
+}
+
+QWidget#tonePanel {
+    background: %4;
+    border: 1px solid %5;
+    border-radius: 10px;
+}
+
+QWidget#tonePanel QLabel#tonePanelTitle {
+    color: %6;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+QStatusBar {
+    border-top: 1px solid %3;
+    background: %2;
+}
+
+QStatusBar::item {
+    border: none;
+}
+
+QProgressBar#statusProgress {
+    border: 1px solid %3;
+    border-radius: 6px;
+    min-height: 12px;
+    text-align: center;
+}
+
+QProgressBar#statusProgress::chunk {
+    background: %7;
+    border-radius: 5px;
+}
+
+QPushButton#statusCancelButton {
+    border-radius: 6px;
+    padding: 2px 8px;
+}
+
+QPushButton#statusCancelButton:hover {
+    background: %8;
+}
+)")
+        .arg(cssColor(window),
+             cssColor(chrome),
+             cssColor(chromeBorder),
+             cssColor(contextPanel),
+             cssColor(contextBorder),
+             cssColor(toneTitle),
+             cssColor(highlight),
+             cssColor(selectedFill),
+             cssColor(hoverFill));
+}
+
+void applyMacCompactSize(QWidget *widget, bool mini = false)
+{
+#if defined(Q_OS_MACOS)
+    widget->setAttribute(mini ? Qt::WA_MacMiniSize : Qt::WA_MacSmallSize);
+#else
+    Q_UNUSED(widget);
+    Q_UNUSED(mini);
+#endif
+}
+
+QFrame *createDivider(QWidget *parent = nullptr)
+{
+    QFrame *divider = new QFrame(parent);
+    divider->setObjectName("headerDivider");
+    divider->setFrameShape(QFrame::VLine);
+    divider->setFrameShadow(QFrame::Plain);
+    return divider;
+}
+
+QToolButton *createActionButton(QAction *action,
+                                bool primary,
+                                QWidget *parent = nullptr)
+{
+    QToolButton *button = new QToolButton(parent);
+    button->setObjectName(primary ? QStringLiteral("primaryButton")
+                                  : QStringLiteral("contextButton"));
+    button->setDefaultAction(action);
+    button->setAutoRaise(false);
+    button->setFocusPolicy(Qt::NoFocus);
+    button->setCursor(Qt::PointingHandCursor);
+#if defined(Q_OS_MACOS)
+    applyMacCompactSize(button, primary);
+    button->setIconSize(primary ? QSize(16, 16) : QSize(14, 14));
+#else
+    button->setIconSize(QSize(18, 18));
+    applyMacCompactSize(button);
+#endif
+    if (primary)
+        button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    else
+        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    button->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+    return button;
+}
+
+QWidget *createPrimaryGroup(std::initializer_list<QAction *> actions,
+                            QWidget *parent = nullptr)
+{
+    QWidget *group = new QWidget(parent);
+    QHBoxLayout *layout = new QHBoxLayout(group);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(6);
+    for (QAction *action : actions)
+        layout->addWidget(createActionButton(action, true, group));
+    return group;
+}
+
+QWidget *createActionRow(const char *name,
+                         std::initializer_list<QAction *> actions,
+                         QWidget *parent = nullptr)
+{
+    QWidget *row = new QWidget(parent);
+    row->setObjectName(QString::fromLatin1(name));
+
+    QHBoxLayout *layout = new QHBoxLayout(row);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(6);
+    for (QAction *action : actions)
+        layout->addWidget(createActionButton(action, false, row));
+    row->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+    return row;
+}
+}
+
 MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
 	m_project(project),
 	m_undoMgr(new UndoManager(this)),
 	m_clipboard(new Clipboard(this)),
+	m_refreshingTheme(false),
 	m_pluginMode(false)
 {
+    setObjectName("mainWindow");
+
 	connect(&ImageManager::get(), &ImageManager::imageChanged, this, &MainWindow::onImageChanged);
 	connect(&ImageManager::get(), &ImageManager::status, this,
             [this](const QString &msg) { statusBar()->showMessage(msg); });
@@ -63,40 +312,34 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
 	connect(m_viewer, &Viewer::toolChanged, this, &MainWindow::onToolChanged);
 
 	m_scroller = new ViewerScroller(m_viewer);
+    m_scroller->setObjectName("viewerStage");
 
     // VIEWER TOOLS
-    m_viewerTools = new QToolBar;
-    m_viewerTools->setObjectName("viewerTools");
-    m_viewerTools->setIconSize(QSize(24, 24));
     {
-        m_doneAction = m_viewerTools->addAction(QIcon(":images/done.png"), tr("Done"));
-        connect(m_doneAction, &QAction::triggered, this, &MainWindow::onDone);
-        m_cancelAction = m_viewerTools->addAction(QIcon(":images/cancel.png"), tr("Cancel"));
-        connect(m_cancelAction, &QAction::triggered, this, &MainWindow::onCancel);
-
-        m_viewerTools->addSeparator();
-
-        QAction *reset = m_viewerTools->addAction(QIcon(":images/reset.png"), tr("Reset"));
+        QAction *reset = new QAction(QIcon(":images/reset.png"), tr("Reset"), this);
         connect(reset, &QAction::triggered, this, &MainWindow::onReset);
         reset->setToolTip(tr("Reset All"));
+        reset->setStatusTip(tr("Reset all cradle polygons"));
 
-        m_viewerTools->addSeparator();
-
-        QAction *zoom100 = m_viewerTools->addAction(QIcon(":images/1to1.png"), tr("Zoom 100%"));
+        QAction *zoom100 = new QAction(QIcon(":images/1to1.png"), tr("Zoom 100%"), this);
         connect(zoom100, &QAction::triggered, m_viewer, &Viewer::zoom100);
         zoom100->setToolTip(tr("Zoom 1:1 (h)"));
+        zoom100->setStatusTip(tr("View image at 100%%"));
 
-        QAction *zoomFit = m_viewerTools->addAction(QIcon(":images/fitImage.png"), tr("Zoom to Fit"));
+        QAction *zoomFit = new QAction(QIcon(":images/fitImage.png"), tr("Zoom to Fit"), this);
         connect(zoomFit, &QAction::triggered, m_viewer, &Viewer::zoomToFit);
         zoomFit->setToolTip(tr("Zoom to Fit (f)"));
+        zoomFit->setStatusTip(tr("Fit image to the available workspace"));
 
-        QAction *zoomIn = m_viewerTools->addAction(QIcon(":images/zoomIn.png"), tr("Zoom In"));
+        QAction *zoomIn = new QAction(QIcon(":images/zoomIn.png"), tr("Zoom In"), this);
         connect(zoomIn, &QAction::triggered, m_viewer, &Viewer::zoomIn);
         zoomIn->setToolTip(tr("Zoom In (i)"));
+        zoomIn->setStatusTip(tr("Zoom into the image"));
 
-        QAction *zoomOut = m_viewerTools->addAction(QIcon(":images/zoomOut.png"), tr("Zoom Out"));
+        QAction *zoomOut = new QAction(QIcon(":images/zoomOut.png"), tr("Zoom Out"), this);
         connect(zoomOut, &QAction::triggered, m_viewer, &Viewer::zoomOut);
         zoomOut->setToolTip(tr("Zoom Out (o)"));
+        zoomOut->setStatusTip(tr("Zoom out from the image"));
 
         #if defined(Q_OS_MACOS)
             zoom100->setShortcut(QKeySequence("h"));
@@ -105,21 +348,58 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
             zoomOut->setShortcut(QKeySequence("o"));
         #endif
 
-        m_overlay = m_viewerTools->addAction(QIcon(":images/overlay.png"), tr("Show Overlay"));
+        m_overlay = new QAction(QIcon(":images/overlay.png"), tr("Overlay"), this);
         connect(m_overlay, &QAction::triggered, this, &MainWindow::onToggleOverlay);
         m_overlay->setToolTip(tr("Toggle Overlay (q)"));
         m_overlay->setCheckable(true);
         m_overlay->setChecked(m_viewer->overlayEnabled());
         m_overlay->setShortcut(QKeySequence("q"));
+        m_overlay->setStatusTip(tr("Show or hide the editing overlay"));
+
+        m_doneAction = new QAction(QIcon(":images/done.png"), tr("Done"), this);
+        connect(m_doneAction, &QAction::triggered, this, &MainWindow::onDone);
+        m_doneAction->setToolTip(tr("Done"));
+        m_doneAction->setStatusTip(tr("Apply changes and close"));
+        m_cancelAction = new QAction(QIcon(":images/cancel.png"), tr("Cancel"), this);
+        connect(m_cancelAction, &QAction::triggered, this, &MainWindow::onCancel);
+        m_cancelAction->setToolTip(tr("Cancel"));
+        m_cancelAction->setStatusTip(tr("Discard changes and close"));
+        for (QAction *action :
+             {reset, zoom100, zoomFit, zoomIn, zoomOut, m_overlay,
+              m_doneAction, m_cancelAction}) {
+            addAction(action);
+        }
+
+        m_primaryBar = new QWidget(this);
+        m_primaryBar->setObjectName("primaryBar");
+        m_primaryBar->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+        {
+            QHBoxLayout *layout = new QHBoxLayout(m_primaryBar);
+            layout->setContentsMargins(12, 8, 12, 8);
+            layout->setSpacing(8);
+            layout->addWidget(createPrimaryGroup({reset}, m_primaryBar), 0, Qt::AlignVCenter);
+            layout->addWidget(createDivider(m_primaryBar));
+            layout->addWidget(createPrimaryGroup({zoom100, zoomFit, zoomIn, zoomOut}, m_primaryBar),
+                              0,
+                              Qt::AlignVCenter);
+            layout->addWidget(createDivider(m_primaryBar));
+            layout->addWidget(createPrimaryGroup({m_overlay}, m_primaryBar), 0, Qt::AlignVCenter);
+            layout->addStretch(1);
+
+            m_pluginControls = new QWidget(m_primaryBar);
+            QHBoxLayout *pluginLayout = new QHBoxLayout(m_pluginControls);
+            pluginLayout->setContentsMargins(0, 0, 0, 0);
+            pluginLayout->setSpacing(8);
+            pluginLayout->addWidget(createDivider(m_pluginControls));
+            pluginLayout->addWidget(createActionButton(m_doneAction, true, m_pluginControls));
+            pluginLayout->addWidget(createActionButton(m_cancelAction, true, m_pluginControls));
+            m_pluginControls->hide();
+            layout->addWidget(m_pluginControls, 0, Qt::AlignVCenter);
+        }
     }
 
-	// TOOLS
-	m_tools = new QToolBar;
-    m_tools->setObjectName("tools");
-    m_tools->setIconSize(QSize(24, 24));
-
 	// EDIT
-	m_polygon = m_tools->addAction(QIcon(":images/polygon.png"), tr("Polygons"));
+	m_polygon = new QAction(QIcon(":images/polygon.png"), tr("Polygons"), this);
 	connect(m_polygon, &QAction::triggered, this, &MainWindow::onTool);
 	m_polygon->setToolTip(tr("Polygons (e)"));
 	m_polygon->setShortcut(QKeySequence("e"));
@@ -128,7 +408,7 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
     m_polygon->setStatusTip(tr("Edit cradle polygons"));
 
 	// MASK
-	m_mask = m_tools->addAction(QIcon(":images/mask.png"), tr("Mask"));
+	m_mask = new QAction(QIcon(":images/mask.png"), tr("Mask"), this);
 	connect(m_mask, &QAction::triggered, this, &MainWindow::onTool);
 	m_mask->setToolTip(tr("Mask (m)"));
 	m_mask->setShortcut(QKeySequence("m"));
@@ -139,10 +419,8 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
 	m_toolActions << m_polygon;
 	m_toolActions << m_mask;
 
-	m_tools->addSeparator();
-
 	// INVERT
-	m_invert = m_tools->addAction(QIcon(":images/invert.png"), tr("Invert"));
+	m_invert = new QAction(QIcon(":images/invert.png"), tr("Invert"), this);
 	connect(m_invert, &QAction::triggered, this, &MainWindow::onCommand);
 	m_invert->setToolTip(tr("Invert Mask (Ctrl+i)"));
 	m_invert->setShortcut(QKeySequence("Ctrl+i"));
@@ -151,36 +429,47 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
     m_commands << m_invert;
 
     // DETECT CRADLE
-	m_detectCradle = m_tools->addAction(QIcon(":images/detectCradle.png"), tr("Detect Cradle"));
+	m_detectCradle = new QAction(QIcon(":images/detectCradle.png"), tr("Detect Cradle"), this);
 	connect(m_detectCradle, &QAction::triggered, this, &MainWindow::onDetectCradle);
+    m_detectCradle->setToolTip(tr("Detect Cradle"));
     m_detectCradle->setStatusTip(tr("Detect cradle"));
 
-	m_removeCradle = m_tools->addAction(QIcon(":images/removeCradle.png"), tr("Remove Cradle"));
+	m_removeCradle = new QAction(QIcon(":images/removeCradle.png"), tr("Remove Cradle"), this);
 	connect(m_removeCradle, &QAction::triggered, this, &MainWindow::onRemoveCradle);
+    m_removeCradle->setToolTip(tr("Remove Cradle"));
     m_removeCradle->setStatusTip(tr("Remove cradle"));
 
-	m_removeTexture = m_tools->addAction(tr("Remove Texture"));
+	m_removeTexture = new QAction(tr("Remove Texture"), this);
 	connect(m_removeTexture, &QAction::triggered, this, &MainWindow::onRemoveTexture);
+    m_removeTexture->setToolTip(tr("Remove Texture"));
     m_removeTexture->setStatusTip(tr("Remove texture"));
 
 	// REMOVAL TOOLS
-	m_showResult = m_tools->addAction(tr("Show Result"));
+	m_showResult = new QAction(tr("Show Result"), this);
 	connect(m_showResult, &QAction::triggered, this, &MainWindow::onToggleResult);
 	m_showResult->setToolTip(tr("Toggle Result (r)"));
 	m_showResult->setCheckable(true);
 	m_showResult->setChecked(true);
 	m_showResult->setShortcut(QKeySequence("r"));
     m_showResult->setStatusTip(tr("Toggle result image display"));
+    for (QAction *action :
+         {m_polygon, m_mask, m_invert, m_detectCradle, m_removeCradle,
+          m_removeTexture, m_showResult}) {
+        addAction(action);
+    }
 
     // INTENSITY
     {
-        QWidget *spacer = new QWidget;
-        spacer->setFixedWidth(16);
-        m_tools->addWidget(spacer);
+		m_tonePanel = new QWidget;
+        m_tonePanel->setObjectName("tonePanel");
+		QHBoxLayout *layout = new QHBoxLayout(m_tonePanel);
+		layout->setContentsMargins(10, 6, 10, 6);
+        layout->setSpacing(8);
 
-		QWidget *sliders = new QWidget;
-		QHBoxLayout *layout = new QHBoxLayout(sliders);
-		layout->setContentsMargins(0, 0, 0, 0);
+        QLabel *toneTitle = new QLabel(tr("Tone"), m_tonePanel);
+        toneTitle->setObjectName("tonePanelTitle");
+        toneTitle->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        layout->addWidget(toneTitle);
 
         m_black = new Slider;
         m_black->setObjectName("black");
@@ -209,15 +498,17 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
 		layout->addWidget(m_black);
 		layout->addWidget(m_gamma);
 		layout->addWidget(m_white);
-		layout->addStretch(100);
-        m_tools->addWidget(sliders);
+        layout->addStretch(1);
+        m_tonePanel->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
     }
-
-	addToolBar(Qt::TopToolBarArea, m_viewerTools);
-	addToolBar(Qt::TopToolBarArea, m_tools);
 
 	// TABS
 	m_tabs = new QTabBar;
+    m_tabs->setObjectName("modeTabs");
+    m_tabs->setDocumentMode(true);
+    m_tabs->setDrawBase(false);
+    m_tabs->setFocusPolicy(Qt::NoFocus);
+    m_tabs->setUsesScrollButtons(false);
 	connect(m_tabs, &QTabBar::currentChanged, this, &MainWindow::onTab);
 	m_tabs->blockSignals(true);
 	m_tabs->setExpanding(false);
@@ -225,23 +516,65 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
 	m_tabs->addTab(tr("Remove"));
 	m_tabs->addTab(tr("Texture"));
 	m_tabs->blockSignals(false);
+    applyMacCompactSize(m_tabs);
+
+    m_markControls = createActionRow("markControls",
+                                     {m_polygon, m_mask, m_invert, m_detectCradle, m_removeCradle},
+                                     this);
+    m_removeControls = new QWidget(this);
+    m_removeControls->setObjectName("removeControls");
+    {
+        QHBoxLayout *layout = new QHBoxLayout(m_removeControls);
+        layout->setContentsMargins(8, 6, 8, 6);
+        layout->setSpacing(6);
+        layout->addWidget(createActionButton(m_showResult, m_removeControls));
+        layout->addWidget(m_tonePanel);
+        layout->addStretch(1);
+    }
+    m_textureControls = createActionRow("textureControls", {m_removeTexture}, this);
+
+    m_contextStack = new QStackedWidget(this);
+    m_contextStack->setObjectName("contextStack");
+    m_contextStack->addWidget(m_markControls);
+    m_contextStack->addWidget(m_removeControls);
+    m_contextStack->addWidget(m_textureControls);
+    m_contextStack->setCurrentIndex(kTab_Mark);
+    m_contextStack->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+
+    m_modeStrip = new QWidget(this);
+    m_modeStrip->setObjectName("modeStrip");
+    m_modeStrip->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+    {
+        QHBoxLayout *layout = new QHBoxLayout(m_modeStrip);
+        layout->setContentsMargins(12, 8, 12, 8);
+        layout->setSpacing(10);
+        layout->addWidget(m_tabs, 0, Qt::AlignVCenter);
+        layout->addWidget(m_contextStack, 0, Qt::AlignVCenter);
+        layout->addStretch(1);
+    }
 
 	QWidget *widget = new QWidget;
+    widget->setObjectName("mainWindowCentral");
 	QVBoxLayout *layout = new QVBoxLayout(widget);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
-	layout->addWidget(m_tabs);
+	layout->addWidget(m_primaryBar);
+	layout->addWidget(m_modeStrip);
 	layout->addWidget(m_scroller);
 	setCentralWidget(widget);
 
-	m_tools->setEnabled(false);
-    m_viewerTools->setEnabled(false);
-    m_tabs->setEnabled(false);
+    m_primaryBar->setEnabled(false);
+    m_modeStrip->setEnabled(false);
 
     m_progressBar = new QProgressBar;
     m_cancel = new QPushButton(tr("Cancel"));
+    m_progressBar->setObjectName("statusProgress");
+    m_progressBar->setFixedWidth(180);
+    m_progressBar->setTextVisible(false);
+    m_cancel->setObjectName("statusCancelButton");
     m_cancel->setFixedHeight(20);
     connect(m_cancel, &QPushButton::clicked, this, &MainWindow::onCancelProgress);
+    statusBar()->setSizeGripEnabled(false);
     statusBar()->addPermanentWidget(m_progressBar);
     statusBar()->addPermanentWidget(m_cancel);
     m_progressBar->hide();
@@ -250,6 +583,7 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
 
 	setupMenus();
     setWindowTitle(QCoreApplication::applicationName());
+    refreshTheme();
 
     // set draw tool
     m_viewer->setTool(Viewer::kTool_Polygon);
@@ -258,6 +592,31 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
 MainWindow::~MainWindow()
 {
 
+}
+
+void MainWindow::refreshTheme()
+{
+    if (m_refreshingTheme)
+        return;
+
+    m_refreshingTheme = true;
+    const QString sheet = mainWindowStyleSheet(palette());
+    if (styleSheet() != sheet)
+        setStyleSheet(sheet);
+    m_viewer->update();
+    m_scroller->update();
+    m_refreshingTheme = false;
+}
+
+void MainWindow::changeEvent(QEvent *event)
+{
+    if (!m_refreshingTheme &&
+        (event->type() == QEvent::PaletteChange ||
+         event->type() == QEvent::ApplicationPaletteChange ||
+         event->type() == QEvent::StyleChange)) {
+        refreshTheme();
+    }
+    QMainWindow::changeEvent(event);
 }
 
 void MainWindow::setupMenus()
@@ -424,9 +783,8 @@ void MainWindow::loadCradle(const QString &path)
     ImageManager::get().removeSource()->setIsFinal(true);
 
 	m_tabs->setCurrentIndex(kTab_Mark);
-	m_tools->setEnabled(true);
-	m_viewerTools->setEnabled(true);
-	m_tabs->setEnabled(true);
+	m_primaryBar->setEnabled(true);
+    m_modeStrip->setEnabled(true);
 	onTab(m_tabs->currentIndex());
 }
 
@@ -449,8 +807,7 @@ void MainWindow::open(const QString &path, bool pluginMode)
 	m_open->setVisible(!pluginMode);
 	m_export->setVisible(!pluginMode);
 	m_close->setVisible(!pluginMode);
-	m_doneAction->setVisible(pluginMode);
-	m_cancelAction->setVisible(pluginMode);
+    m_pluginControls->setVisible(pluginMode);
 }
 
 //
@@ -498,9 +855,8 @@ void MainWindow::onOpen()
 void MainWindow::onClose()
 {
 	m_viewer->setTool(Viewer::kTool_None);
-	m_tools->setEnabled(false);
-	m_viewerTools->setEnabled(false);
-    m_tabs->setEnabled(false);
+	m_primaryBar->setEnabled(false);
+    m_modeStrip->setEnabled(false);
 
     ImageManager::get().removeSource()->setProject(nullptr);
 
@@ -682,16 +1038,9 @@ void MainWindow::onTab(int index)
 			m_viewer->setTool(Viewer::kTool_Texture);
 			break;
 	}
-	m_polygon->setVisible(index == kTab_Mark);
-	m_mask->setVisible(index == kTab_Mark);
-	m_detectCradle->setVisible(index == kTab_Mark);
-	m_removeCradle->setVisible(index == kTab_Mark);
-	m_removeTexture->setVisible(index == kTab_Texture);
+    m_contextStack->setCurrentIndex(index);
 
-	m_showResult->setVisible(index == kTab_Remove);
-	m_black->setVisible(index == kTab_Remove);
-	m_gamma->setVisible(index == kTab_Remove);
-	m_white->setVisible(index == kTab_Remove);
+    m_tonePanel->setVisible(index == kTab_Remove);
 
     if (index == kTab_Remove)
         updateSliders();

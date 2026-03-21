@@ -441,6 +441,24 @@ if (APPLE AND PLATYPUS_BUILD_MAC_APP)
   install(SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/PlatypusFixBundle.cmake")
 endif()
 
+if (APPLE)
+  find_program(PLATYPUS_BASH_EXECUTABLE bash REQUIRED)
+  add_custom_target(local_macos_release
+    COMMAND "${PLATYPUS_BASH_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/scripts/mac_local_release.sh"
+            --profile standard
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    USES_TERMINAL
+    COMMENT "Build, sign, notarize, and verify the local standard macOS release")
+  add_custom_target(local_macos13_release
+    COMMAND "${PLATYPUS_BASH_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/scripts/mac_local_release.sh"
+            --profile macos13
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    USES_TERMINAL
+    COMMENT "Build, sign, notarize, and verify the local macOS 13 release")
+endif()
+
 if (WIN32 AND NOT BUILD_PHOTOSHOP_PLUGIN)
   set(CPACK_GENERATOR "NSIS")
   set(CPACK_MONOLITHIC_INSTALL ON)

@@ -33,12 +33,17 @@ endif()
 foreach(_platypus_plugin_file IN LISTS _platypus_qt_plugin_files)
   set(_platypus_plugin_source "${_platypus_qt_plugin_dir}/${_platypus_plugin_file}")
   if(EXISTS "${_platypus_plugin_source}")
+    get_filename_component(_platypus_plugin_source_real
+                           "${_platypus_plugin_source}" REALPATH)
     set(_platypus_plugin_destination
         "${_platypus_bundle}/Contents/PlugIns/${_platypus_plugin_file}")
     get_filename_component(_platypus_plugin_destination_dir
                            "${_platypus_plugin_destination}" DIRECTORY)
     file(MAKE_DIRECTORY "${_platypus_plugin_destination_dir}")
-    file(COPY "${_platypus_plugin_source}"
-         DESTINATION "${_platypus_plugin_destination_dir}")
+    if(EXISTS "${_platypus_plugin_destination}" OR IS_SYMLINK "${_platypus_plugin_destination}")
+      file(REMOVE "${_platypus_plugin_destination}")
+    endif()
+    file(COPY_FILE "${_platypus_plugin_source_real}"
+         "${_platypus_plugin_destination}")
   endif()
 endforeach()

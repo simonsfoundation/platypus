@@ -12,14 +12,24 @@ else()
 endif()
 set(_platypus_bundle_raw "${_platypus_install_root_raw}/${_platypus_bundle_name}")
 set(_platypus_extra_dirs "@PLATYPUS_BUNDLE_FIXUP_DIRS_JOINED@")
+set(_platypus_qt_plugin_files "@PLATYPUS_QT_PLUGIN_FILES_JOINED@")
 
 if(NOT EXISTS "${_platypus_bundle_raw}")
   message(FATAL_ERROR "Platypus app bundle not found for fixup: ${_platypus_bundle_raw}")
 endif()
 get_filename_component(_platypus_bundle "${_platypus_bundle_raw}" REALPATH)
 
+set(_platypus_bundle_plugins)
+foreach(_platypus_plugin_file IN LISTS _platypus_qt_plugin_files)
+  set(_platypus_plugin_path
+      "${_platypus_bundle}/Contents/PlugIns/${_platypus_plugin_file}")
+  if(EXISTS "${_platypus_plugin_path}")
+    list(APPEND _platypus_bundle_plugins "${_platypus_plugin_path}")
+  endif()
+endforeach()
+
 message(STATUS "Fixing macOS bundle dependencies in ${_platypus_bundle}")
-fixup_bundle("${_platypus_bundle}" "" "${_platypus_extra_dirs}")
+fixup_bundle("${_platypus_bundle}" "${_platypus_bundle_plugins}" "${_platypus_extra_dirs}")
 
 file(GLOB _platypus_frameworks "${_platypus_bundle}/Contents/Frameworks/*.framework")
 foreach(_platypus_framework IN LISTS _platypus_frameworks)

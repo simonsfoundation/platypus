@@ -1,5 +1,6 @@
 #include <imageViewer.h>
 #include <QtGui/QPainter>
+#include <QtGui/QPainterPath>
 #include <QtGui/QResizeEvent>
 #include <QtGui/QPixmap>
 #include <QtCore/QDebug>
@@ -8,7 +9,7 @@ ImageViewer::ImageViewer(QWidget *parent) : QWidget(parent)
 {
 	m_source = nullptr;
 	m_zoom = 1.0f;
-	m_margin = QSize(10, 10);
+	m_margin = QSize(24, 24);
 	m_defaultSize = QSize(1000, 800);
 	m_updateImage = false;
 	m_pan = false;
@@ -26,11 +27,6 @@ ImageViewer::ImageViewer(QWidget *parent) : QWidget(parent)
 	m_showPanCursor = false;
 
 	setMouseTracking(true);
-	setBackgroundRole(QPalette::Base);
-
-    QPalette p = palette();
-    p.setColor(QPalette::Base, Qt::darkGray);
-    setPalette(p);
 }
 
 void ImageViewer::setDefaultSize(const QSize &size)
@@ -248,7 +244,43 @@ QPixmap ImageViewer::convertImage(QImage image) const
 void ImageViewer::paintEvent(QPaintEvent *event)
 {
 	QPainter p(this);
-	p.fillRect(rect(), palette().base());
+    p.setRenderHint(QPainter::Antialiasing);
+
+    const QColor window = palette().color(QPalette::Window);
+    const bool dark = window.lightness() < 140;
+
+    const QColor backdropTop = dark ? QColor(108, 111, 115)
+                                    : QColor(225, 227, 230);
+    const QColor backdropBottom = dark ? QColor(92, 95, 99)
+                                       : QColor(209, 212, 216);
+    const QColor frameFill = dark ? QColor(27, 31, 35, 220)
+                                  : QColor(252, 252, 253, 226);
+    const QColor frameBorder = dark ? QColor(255, 255, 255, 34)
+                                    : QColor(0, 0, 0, 28);
+
+    QLinearGradient backdrop(0.0, 0.0, 0.0, height());
+    backdrop.setColorAt(0.0, backdropTop);
+    backdrop.setColorAt(1.0, backdropBottom);
+	p.fillRect(rect(), backdrop);
+
+    QRect visibleStage = m_destRect.intersected(rect());
+    if (!visibleStage.isEmpty())
+    {
+        QRectF shadowRect = visibleStage.adjusted(-18, -18, 18, 18);
+        shadowRect.translate(0.0, 8.0);
+        QPainterPath shadowPath;
+        shadowPath.addRoundedRect(shadowRect, 18.0, 18.0);
+        p.fillPath(shadowPath, QColor(0, 0, 0, 52));
+
+        QRectF stageRect = visibleStage.adjusted(-16, -16, 16, 16);
+        QPainterPath stagePath;
+        stagePath.addRoundedRect(stageRect, 16.0, 16.0);
+        p.fillPath(stagePath, frameFill);
+        p.setPen(QPen(frameBorder, 1.0));
+        p.drawPath(stagePath);
+    }
+
+    p.setRenderHint(QPainter::Antialiasing, false);
 
 	if (m_source)
 	{
@@ -269,7 +301,12 @@ void ImageViewer::paintEvent(QPaintEvent *event)
 			}
 		}
 		if (!m_pixmap.isNull())
+        {
 			drawImage(p);
+            p.setPen(QPen(dark ? QColor(255, 255, 255, 42)
+                              : QColor(0, 0, 0, 26), 1.0));
+            p.drawRect(m_visDestRect.adjusted(0, 0, -1, -1));
+        }
 	}
 }
 

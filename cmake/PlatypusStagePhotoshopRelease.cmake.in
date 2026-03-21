@@ -292,18 +292,32 @@ endif()
 foreach(_platypus_plugin_file IN LISTS _platypus_qt_plugin_files)
   set(_platypus_plugin_source "${_platypus_qt_plugin_dir}/${_platypus_plugin_file}")
   if(EXISTS "${_platypus_plugin_source}")
+    get_filename_component(_platypus_plugin_source_real
+                           "${_platypus_plugin_source}" REALPATH)
     set(_platypus_plugin_destination
         "${_platypus_app_bundle}/Contents/PlugIns/${_platypus_plugin_file}")
     get_filename_component(_platypus_plugin_destination_dir
                            "${_platypus_plugin_destination}" DIRECTORY)
     file(MAKE_DIRECTORY "${_platypus_plugin_destination_dir}")
-    file(COPY "${_platypus_plugin_source}"
-         DESTINATION "${_platypus_plugin_destination_dir}")
+    if(EXISTS "${_platypus_plugin_destination}" OR IS_SYMLINK "${_platypus_plugin_destination}")
+      file(REMOVE "${_platypus_plugin_destination}")
+    endif()
+    file(COPY_FILE "${_platypus_plugin_source_real}"
+         "${_platypus_plugin_destination}")
+  endif()
+endforeach()
+
+set(_platypus_app_bundle_plugins)
+foreach(_platypus_plugin_file IN LISTS _platypus_qt_plugin_files)
+  set(_platypus_plugin_path
+      "${_platypus_app_bundle}/Contents/PlugIns/${_platypus_plugin_file}")
+  if(EXISTS "${_platypus_plugin_path}")
+    list(APPEND _platypus_app_bundle_plugins "${_platypus_plugin_path}")
   endif()
 endforeach()
 
 message(STATUS "Fixing macOS app bundle dependencies in ${_platypus_app_bundle}")
-fixup_bundle("${_platypus_app_bundle}" "" "${_platypus_extra_dirs}")
+fixup_bundle("${_platypus_app_bundle}" "${_platypus_app_bundle_plugins}" "${_platypus_extra_dirs}")
 _platypus_restore_framework_symlinks("${_platypus_app_bundle}")
 
 message(STATUS "Fixing Photoshop plugin bundle dependencies in ${_platypus_plugin_bundle}")

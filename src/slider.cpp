@@ -5,18 +5,28 @@
 #include <QtWidgets/QLabel>
 #include <QtGui/QValidator>
 #include <QtGui/QKeyEvent>
+#include <QtWidgets/QSizePolicy>
 
 static bool s_editing = false;
 
 Slider::Slider(QWidget *parent) : QWidget(parent), m_indeterminate(false)
 {
     m_label = new QLabel;
+    m_label->setMinimumWidth(38);
+    m_label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_slider = new QSlider(Qt::Horizontal);
-    m_slider->setFixedWidth(128);
+    m_slider->setFixedWidth(104);
     m_edit = new QLineEdit;
     m_edit->setReadOnly(false);
     m_edit->setFixedWidth(40);
     m_edit->setAlignment(Qt::AlignRight);
+    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+
+#if defined(Q_OS_MACOS)
+    setAttribute(Qt::WA_MacSmallSize);
+    m_slider->setAttribute(Qt::WA_MacSmallSize);
+    m_edit->setAttribute(Qt::WA_MacSmallSize);
+#endif
 
     connect(m_slider, &QSlider::sliderPressed, this, &Slider::onSliderPressed);
     connect(m_slider, &QSlider::sliderReleased, this, &Slider::onSliderReleased);
@@ -25,6 +35,7 @@ Slider::Slider(QWidget *parent) : QWidget(parent), m_indeterminate(false)
 
     QHBoxLayout *layout = new QHBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(6);
     layout->addWidget(m_label);
     layout->addWidget(m_slider);
     layout->addWidget(m_edit);

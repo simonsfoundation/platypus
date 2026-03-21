@@ -3,6 +3,7 @@
 #include <imageManager.h>
 #include <project.h>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QStyleFactory>
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
 #include <QtCore/QSettings>
@@ -30,6 +31,11 @@ int main(int argc, char *argv[])
 	}
 
 	QApplication a(argc, argv);
+
+#if !defined(Q_OS_MACOS)
+    if (QStyle *style = QStyleFactory::create(QStringLiteral("Fusion")))
+        a.setStyle(style);
+#endif
 
 
     QSettings settings;
