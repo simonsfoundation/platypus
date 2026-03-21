@@ -12,6 +12,7 @@ public:
     
     void setRange(int min, int max);
     void setLabel(const QString &label);
+    void setHelpText(const QString &toolTip, const QString &statusTip = QString());
     int value() const;
     
     int minimum() const;

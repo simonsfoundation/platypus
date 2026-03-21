@@ -65,6 +65,15 @@ QLabel#dialogHint {
     color: %5;
 }
 
+QRadioButton {
+    spacing: 8px;
+}
+
+QRadioButton::indicator {
+    width: 14px;
+    height: 14px;
+}
+
 QSpinBox {
     min-width: 68px;
     padding: 3px 8px;
@@ -73,17 +82,29 @@ QSpinBox {
     background: %1;
 }
 
+QSpinBox:focus {
+    border-color: %7;
+}
+
 QPushButton {
-    min-width: 104px;
-    padding: 5px 14px;
+    min-width: 96px;
+    padding: 4px 12px;
     border: 1px solid %3;
     border-radius: 9px;
     background: transparent;
 }
 
+QPushButton:hover {
+    background: %6;
+}
+
 QPushButton[role="primary"] {
     background: %6;
     border-color: %7;
+}
+
+QPushButton[role="primary"]:hover {
+    background: %7;
 }
 )")
         .arg(cssColor(window),
@@ -93,6 +114,18 @@ QPushButton[role="primary"] {
              cssColor(secondaryText),
              cssColor(accentFill),
              cssColor(highlight));
+}
+
+void applyHelpText(QWidget *widget,
+                   const QString &toolTip,
+                   const QString &statusTip,
+                   const QString &accessibleName = QString())
+{
+    widget->setToolTip(toolTip);
+    widget->setStatusTip(statusTip);
+    widget->setWhatsThis(statusTip);
+    widget->setAccessibleName(accessibleName.isEmpty() ? toolTip : accessibleName);
+    widget->setAccessibleDescription(statusTip);
 }
 
 void applyMacCompactSize(QWidget *widget)
@@ -132,6 +165,7 @@ DetectCradleDialog::DetectCradleDialog(QWidget *parent) : QDialog(parent)
     setWindowTitle(tr("Detect Cradle"));
     setModal(true);
     setMinimumWidth(420);
+    setAttribute(Qt::WA_AlwaysShowToolTips);
     setStyleSheet(dialogStyleSheet(palette()));
 
     QVBoxLayout *layout = new QVBoxLayout(this);
@@ -145,6 +179,12 @@ DetectCradleDialog::DetectCradleDialog(QWidget *parent) : QDialog(parent)
     m_assisted = new QRadioButton(tr("Assisted Detect"));
     applyMacCompactSize(m_auto);
     applyMacCompactSize(m_assisted);
+    applyHelpText(m_auto,
+                  tr("Auto detect cradle members"),
+                  tr("Let Platypus estimate the number of horizontal and vertical cradle members automatically."));
+    applyHelpText(m_assisted,
+                  tr("Assisted detect cradle members"),
+                  tr("Provide approximate horizontal and vertical member counts to guide cradle detection."));
     modeLayout->addWidget(m_auto);
     modeLayout->addWidget(m_assisted);
 
@@ -171,6 +211,12 @@ DetectCradleDialog::DetectCradleDialog(QWidget *parent) : QDialog(parent)
     m_v->setRange(1, 50);
     m_h->setAlignment(Qt::AlignRight);
     m_v->setAlignment(Qt::AlignRight);
+    applyHelpText(m_h,
+                  tr("Horizontal member count"),
+                  tr("Approximate number of horizontal cradle members expected in the image."));
+    applyHelpText(m_v,
+                  tr("Vertical member count"),
+                  tr("Approximate number of vertical cradle members expected in the image."));
 
     QGridLayout *grid = new QGridLayout;
     grid->setContentsMargins(0, 0, 0, 0);
@@ -194,6 +240,12 @@ DetectCradleDialog::DetectCradleDialog(QWidget *parent) : QDialog(parent)
     buttons->button(QDialogButtonBox::Ok)->setProperty("role", "primary");
     applyMacCompactSize(buttons->button(QDialogButtonBox::Ok));
     applyMacCompactSize(buttons->button(QDialogButtonBox::Cancel));
+    applyHelpText(buttons->button(QDialogButtonBox::Ok),
+                  tr("Run cradle detection"),
+                  tr("Run cradle detection using the selected mode and guide counts."));
+    applyHelpText(buttons->button(QDialogButtonBox::Cancel),
+                  tr("Cancel detection"),
+                  tr("Close the dialog without changing the current cradle marks."));
 
     QSettings settings;
     int h = settings.value(kKey_Horizontal, 5).toInt();

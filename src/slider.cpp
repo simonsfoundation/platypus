@@ -3,22 +3,64 @@
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QBoxLayout>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QApplication>
 #include <QtGui/QValidator>
 #include <QtGui/QKeyEvent>
+#include <QtGui/QStatusTipEvent>
 #include <QtWidgets/QSizePolicy>
 
 static bool s_editing = false;
 
+namespace
+{
+class HoverStatusTipFilter : public QObject
+{
+public:
+    explicit HoverStatusTipFilter(QWidget *owner) : QObject(owner)
+    {
+    }
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        QWidget *widget = qobject_cast<QWidget *>(watched);
+        if (!widget)
+            return QObject::eventFilter(watched, event);
+
+        if (event->type() == QEvent::Enter) {
+            const QString statusTip = widget->statusTip();
+            if (!statusTip.isEmpty()) {
+                QStatusTipEvent statusEvent(statusTip);
+                QApplication::sendEvent(widget->window(), &statusEvent);
+            }
+        } else if (event->type() == QEvent::Leave) {
+            QStatusTipEvent clearEvent(QString{});
+            QApplication::sendEvent(widget->window(), &clearEvent);
+        }
+
+        return QObject::eventFilter(watched, event);
+    }
+};
+
+void installHoverStatusTip(QWidget *widget)
+{
+    widget->installEventFilter(new HoverStatusTipFilter(widget));
+}
+}
+
 Slider::Slider(QWidget *parent) : QWidget(parent), m_indeterminate(false)
 {
     m_label = new QLabel;
-    m_label->setMinimumWidth(38);
+    m_label->setObjectName("toneSliderLabel");
+    m_label->setMinimumWidth(46);
     m_label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_slider = new QSlider(Qt::Horizontal);
-    m_slider->setFixedWidth(104);
+    m_slider->setObjectName("toneSliderControl");
+    m_slider->setFixedWidth(88);
     m_edit = new QLineEdit;
+    m_edit->setObjectName("toneSliderValue");
     m_edit->setReadOnly(false);
-    m_edit->setFixedWidth(40);
+    m_edit->setFixedWidth(36);
     m_edit->setAlignment(Qt::AlignRight);
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
 
@@ -35,7 +77,7 @@ Slider::Slider(QWidget *parent) : QWidget(parent), m_indeterminate(false)
 
     QHBoxLayout *layout = new QHBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(6);
+    layout->setSpacing(4);
     layout->addWidget(m_label);
     layout->addWidget(m_slider);
     layout->addWidget(m_edit);
@@ -44,6 +86,10 @@ Slider::Slider(QWidget *parent) : QWidget(parent), m_indeterminate(false)
 
     m_label->installEventFilter(this);
     m_slider->installEventFilter(this);
+    m_edit->installEventFilter(this);
+    installHoverStatusTip(m_label);
+    installHoverStatusTip(m_slider);
+    installHoverStatusTip(m_edit);
 }
 
 int Slider::minimum() const
@@ -66,6 +112,25 @@ void Slider::setLabel(const QString &label)
 {
     m_label->setText(label);
     m_label->setVisible(!label.isEmpty());
+}
+
+void Slider::setHelpText(const QString &toolTip, const QString &statusTip)
+{
+    const QString effectiveStatus = statusTip.isEmpty() ? toolTip : statusTip;
+    setToolTip(toolTip);
+    setStatusTip(effectiveStatus);
+    setWhatsThis(effectiveStatus);
+    setAccessibleName(m_label->text().isEmpty() ? toolTip : m_label->text());
+    setAccessibleDescription(effectiveStatus);
+
+    for (QWidget *widget : {static_cast<QWidget *>(m_label),
+                            static_cast<QWidget *>(m_slider),
+                            static_cast<QWidget *>(m_edit)}) {
+        widget->setToolTip(toolTip);
+        widget->setStatusTip(effectiveStatus);
+        widget->setWhatsThis(effectiveStatus);
+        widget->setAccessibleDescription(effectiveStatus);
+    }
 }
 
 int Slider::value() const
@@ -171,6 +236,9 @@ void Slider::onEdit()
 bool Slider::eventFilter(QObject *target, QEvent *event)
 {
     if (event->type() == QEvent::Enter)
-        dynamic_cast<QWidget *>(target)->setFocus();
+    {
+        if (QWidget *widget = qobject_cast<QWidget *>(target))
+            widget->setFocus();
+    }
     return QWidget::eventFilter(target, event);
 }

@@ -36,6 +36,7 @@
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
 #include <QtGui/QDesktopServices>
+#include <QtGui/QStatusTipEvent>
 #include <QtWidgets/QStyle>
 #include <QtCore/QSettings>
 #include <QtCore/QLine>
@@ -58,6 +59,76 @@ QString cssColor(const QColor &color)
     return color.name(QColor::HexArgb);
 }
 
+QString plainActionText(const QAction *action)
+{
+    QString text = action->iconText();
+    if (text.isEmpty())
+        text = action->text();
+    int tabIndex = text.indexOf('\t');
+    if (tabIndex >= 0)
+        text.truncate(tabIndex);
+    text.remove('&');
+    return text.trimmed();
+}
+
+QString effectiveActionToolTip(const QAction *action)
+{
+    const QString toolTip = action->toolTip().trimmed();
+    return toolTip.isEmpty() ? plainActionText(action) : toolTip;
+}
+
+QString effectiveActionStatusTip(const QAction *action)
+{
+    const QString statusTip = action->statusTip().trimmed();
+    return statusTip.isEmpty() ? effectiveActionToolTip(action) : statusTip;
+}
+
+void applyHelpText(QWidget *widget,
+                   const QString &toolTip,
+                   const QString &statusTip,
+                   const QString &accessibleName = QString())
+{
+    widget->setToolTip(toolTip);
+    widget->setStatusTip(statusTip);
+    widget->setWhatsThis(statusTip);
+    widget->setAccessibleName(accessibleName.isEmpty() ? toolTip : accessibleName);
+    widget->setAccessibleDescription(statusTip);
+}
+
+class HoverStatusTipFilter : public QObject
+{
+public:
+    explicit HoverStatusTipFilter(QWidget *owner) : QObject(owner)
+    {
+    }
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        QWidget *widget = qobject_cast<QWidget *>(watched);
+        if (!widget)
+            return QObject::eventFilter(watched, event);
+
+        if (event->type() == QEvent::Enter) {
+            const QString statusTip = widget->statusTip();
+            if (!statusTip.isEmpty()) {
+                QStatusTipEvent statusEvent(statusTip);
+                QApplication::sendEvent(widget->window(), &statusEvent);
+            }
+        } else if (event->type() == QEvent::Leave) {
+            QStatusTipEvent clearEvent(QString{});
+            QApplication::sendEvent(widget->window(), &clearEvent);
+        }
+
+        return QObject::eventFilter(watched, event);
+    }
+};
+
+void installHoverStatusTip(QWidget *widget)
+{
+    widget->installEventFilter(new HoverStatusTipFilter(widget));
+}
+
 QString mainWindowStyleSheet(const QPalette &palette)
 {
     const QColor window = palette.color(QPalette::Window);
@@ -71,6 +142,9 @@ QString mainWindowStyleSheet(const QPalette &palette)
     const QColor contextPanel = blendColors(base, window, dark ? 0.16 : 0.06);
     const QColor contextBorder = blendColors(text, window, dark ? 0.88 : 0.94);
     const QColor toneTitle = blendColors(text, window, dark ? 0.30 : 0.46);
+    const QColor toneTrack = blendColors(text, window, dark ? 0.86 : 0.92);
+    const QColor toneInactive = blendColors(base, window, dark ? 0.18 : 0.10);
+    const QColor toneHandle = dark ? QColor(245, 245, 247) : QColor(255, 255, 255);
     QColor hoverFill = blendColors(highlight, chrome, dark ? 0.78 : 0.64);
     QColor selectedFill = highlight;
     selectedFill.setAlpha(dark ? 52 : 28);
@@ -86,18 +160,21 @@ QWidget#primaryBar {
     border-bottom: 1px solid %3;
 }
 
-QFrame#headerDivider {
-    background: %3;
-    min-width: 1px;
-    max-width: 1px;
-    margin: 6px 0;
+QWidget#headerDivider {
+    min-width: 10px;
+    max-width: 10px;
+    border-left: 1px solid %3;
+    margin: 6px 2px;
 }
 
 QToolButton#primaryButton {
     background: transparent;
     border: 1px solid transparent;
-    border-radius: 8px;
-    padding: 4px;
+    border-radius: 7px;
+    padding: 3px 8px;
+    min-height: 24px;
+    font-size: 12px;
+    font-weight: 600;
 }
 
 QToolButton#primaryButton:hover {
@@ -124,7 +201,8 @@ QTabBar#modeTabs::tab {
     border: 1px solid transparent;
     border-radius: 8px;
     margin: 0 4px 0 0;
-    padding: 4px 10px;
+    padding: 3px 10px;
+    min-height: 24px;
     font-size: 12px;
     font-weight: 600;
 }
@@ -142,7 +220,8 @@ QToolButton#contextButton {
     background: transparent;
     border: 1px solid transparent;
     border-radius: 8px;
-    padding: 3px 8px;
+    padding: 3px 10px;
+    min-height: 24px;
     font-size: 12px;
     font-weight: 600;
 }
@@ -158,15 +237,65 @@ QToolButton#contextButton:checked {
 }
 
 QWidget#tonePanel {
-    background: %4;
-    border: 1px solid %5;
-    border-radius: 10px;
+    background: transparent;
 }
 
 QWidget#tonePanel QLabel#tonePanelTitle {
     color: %6;
     font-size: 11px;
     font-weight: 600;
+    margin-right: 2px;
+}
+
+QWidget#tonePanel QLabel#toneSliderLabel {
+    color: %6;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+QWidget#tonePanel QLineEdit#toneSliderValue {
+    padding: 2px 6px;
+    border: 1px solid %5;
+    border-radius: 7px;
+    background: %1;
+    min-height: 20px;
+}
+
+QWidget#tonePanel QLineEdit#toneSliderValue:focus {
+    border-color: %7;
+}
+
+QWidget#tonePanel QSlider#toneSliderControl {
+    min-height: 18px;
+}
+
+QWidget#tonePanel QSlider#toneSliderControl::groove:horizontal {
+    height: 4px;
+    border-radius: 2px;
+    background: %10;
+    margin: 0 6px;
+}
+
+QWidget#tonePanel QSlider#toneSliderControl::sub-page:horizontal {
+    background: %7;
+    border-radius: 2px;
+}
+
+QWidget#tonePanel QSlider#toneSliderControl::add-page:horizontal {
+    background: %11;
+    border-radius: 2px;
+}
+
+QWidget#tonePanel QSlider#toneSliderControl::handle:horizontal {
+    width: 12px;
+    margin: -5px 0;
+    border-radius: 6px;
+    border: 1px solid %5;
+    background: %12;
+}
+
+QWidget#tonePanel QSlider#toneSliderControl::handle:horizontal:hover {
+    border-color: %7;
 }
 
 QStatusBar {
@@ -207,7 +336,10 @@ QPushButton#statusCancelButton:hover {
              cssColor(toneTitle),
              cssColor(highlight),
              cssColor(selectedFill),
-             cssColor(hoverFill));
+             cssColor(hoverFill),
+             cssColor(toneTrack),
+             cssColor(toneInactive),
+             cssColor(toneHandle));
 }
 
 void applyMacCompactSize(QWidget *widget, bool mini = false)
@@ -220,12 +352,10 @@ void applyMacCompactSize(QWidget *widget, bool mini = false)
 #endif
 }
 
-QFrame *createDivider(QWidget *parent = nullptr)
+QWidget *createDivider(QWidget *parent = nullptr)
 {
-    QFrame *divider = new QFrame(parent);
+    QWidget *divider = new QWidget(parent);
     divider->setObjectName("headerDivider");
-    divider->setFrameShape(QFrame::VLine);
-    divider->setFrameShadow(QFrame::Plain);
     return divider;
 }
 
@@ -240,6 +370,11 @@ QToolButton *createActionButton(QAction *action,
     button->setAutoRaise(false);
     button->setFocusPolicy(Qt::NoFocus);
     button->setCursor(Qt::PointingHandCursor);
+    applyHelpText(button,
+                  effectiveActionToolTip(action),
+                  effectiveActionStatusTip(action),
+                  plainActionText(action));
+    installHoverStatusTip(button);
 #if defined(Q_OS_MACOS)
     applyMacCompactSize(button, primary);
     button->setIconSize(primary ? QSize(16, 16) : QSize(14, 14));
@@ -247,10 +382,8 @@ QToolButton *createActionButton(QAction *action,
     button->setIconSize(QSize(18, 18));
     applyMacCompactSize(button);
 #endif
-    if (primary)
-        button->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    else
-        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    button->setText(plainActionText(action));
     button->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
     return button;
 }
@@ -292,6 +425,7 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
 	m_pluginMode(false)
 {
     setObjectName("mainWindow");
+    setAttribute(Qt::WA_AlwaysShowToolTips);
 
 	connect(&ImageManager::get(), &ImageManager::imageChanged, this, &MainWindow::onImageChanged);
 	connect(&ImageManager::get(), &ImageManager::status, this,
@@ -322,21 +456,25 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
         reset->setStatusTip(tr("Reset all cradle polygons"));
 
         QAction *zoom100 = new QAction(QIcon(":images/1to1.png"), tr("Zoom 100%"), this);
+        zoom100->setIconText(tr("1:1"));
         connect(zoom100, &QAction::triggered, m_viewer, &Viewer::zoom100);
         zoom100->setToolTip(tr("Zoom 1:1 (h)"));
         zoom100->setStatusTip(tr("View image at 100%%"));
 
         QAction *zoomFit = new QAction(QIcon(":images/fitImage.png"), tr("Zoom to Fit"), this);
+        zoomFit->setIconText(tr("Fit"));
         connect(zoomFit, &QAction::triggered, m_viewer, &Viewer::zoomToFit);
         zoomFit->setToolTip(tr("Zoom to Fit (f)"));
         zoomFit->setStatusTip(tr("Fit image to the available workspace"));
 
         QAction *zoomIn = new QAction(QIcon(":images/zoomIn.png"), tr("Zoom In"), this);
+        zoomIn->setIconText(tr("In"));
         connect(zoomIn, &QAction::triggered, m_viewer, &Viewer::zoomIn);
         zoomIn->setToolTip(tr("Zoom In (i)"));
         zoomIn->setStatusTip(tr("Zoom into the image"));
 
         QAction *zoomOut = new QAction(QIcon(":images/zoomOut.png"), tr("Zoom Out"), this);
+        zoomOut->setIconText(tr("Out"));
         connect(zoomOut, &QAction::triggered, m_viewer, &Viewer::zoomOut);
         zoomOut->setToolTip(tr("Zoom Out (o)"));
         zoomOut->setStatusTip(tr("Zoom out from the image"));
@@ -375,8 +513,8 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
         m_primaryBar->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
         {
             QHBoxLayout *layout = new QHBoxLayout(m_primaryBar);
-            layout->setContentsMargins(12, 8, 12, 8);
-            layout->setSpacing(8);
+            layout->setContentsMargins(12, 7, 12, 7);
+            layout->setSpacing(6);
             layout->addWidget(createPrimaryGroup({reset}, m_primaryBar), 0, Qt::AlignVCenter);
             layout->addWidget(createDivider(m_primaryBar));
             layout->addWidget(createPrimaryGroup({zoom100, zoomFit, zoomIn, zoomOut}, m_primaryBar),
@@ -400,6 +538,7 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
 
 	// EDIT
 	m_polygon = new QAction(QIcon(":images/polygon.png"), tr("Polygons"), this);
+    m_polygon->setIconText(tr("Polygon"));
 	connect(m_polygon, &QAction::triggered, this, &MainWindow::onTool);
 	m_polygon->setToolTip(tr("Polygons (e)"));
 	m_polygon->setShortcut(QKeySequence("e"));
@@ -430,28 +569,32 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
 
     // DETECT CRADLE
 	m_detectCradle = new QAction(QIcon(":images/detectCradle.png"), tr("Detect Cradle"), this);
+    m_detectCradle->setIconText(tr("Detect"));
 	connect(m_detectCradle, &QAction::triggered, this, &MainWindow::onDetectCradle);
     m_detectCradle->setToolTip(tr("Detect Cradle"));
     m_detectCradle->setStatusTip(tr("Detect cradle"));
 
 	m_removeCradle = new QAction(QIcon(":images/removeCradle.png"), tr("Remove Cradle"), this);
+    m_removeCradle->setIconText(tr("Remove"));
 	connect(m_removeCradle, &QAction::triggered, this, &MainWindow::onRemoveCradle);
     m_removeCradle->setToolTip(tr("Remove Cradle"));
     m_removeCradle->setStatusTip(tr("Remove cradle"));
 
 	m_removeTexture = new QAction(tr("Remove Texture"), this);
+    m_removeTexture->setIconText(tr("Texture"));
 	connect(m_removeTexture, &QAction::triggered, this, &MainWindow::onRemoveTexture);
     m_removeTexture->setToolTip(tr("Remove Texture"));
     m_removeTexture->setStatusTip(tr("Remove texture"));
 
 	// REMOVAL TOOLS
 	m_showResult = new QAction(tr("Show Result"), this);
+    m_showResult->setIconText(tr("Result"));
 	connect(m_showResult, &QAction::triggered, this, &MainWindow::onToggleResult);
 	m_showResult->setToolTip(tr("Toggle Result (r)"));
-	m_showResult->setCheckable(true);
+        m_showResult->setCheckable(true);
 	m_showResult->setChecked(true);
 	m_showResult->setShortcut(QKeySequence("r"));
-    m_showResult->setStatusTip(tr("Toggle result image display"));
+    m_showResult->setStatusTip(tr("Show or hide the processed removal result"));
     for (QAction *action :
          {m_polygon, m_mask, m_invert, m_detectCradle, m_removeCradle,
           m_removeTexture, m_showResult}) {
@@ -464,7 +607,7 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
         m_tonePanel->setObjectName("tonePanel");
 		QHBoxLayout *layout = new QHBoxLayout(m_tonePanel);
 		layout->setContentsMargins(10, 6, 10, 6);
-        layout->setSpacing(8);
+        layout->setSpacing(6);
 
         QLabel *toneTitle = new QLabel(tr("Tone"), m_tonePanel);
         toneTitle->setObjectName("tonePanelTitle");
@@ -474,6 +617,8 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
         m_black = new Slider;
         m_black->setObjectName("black");
         m_black->setLabel(tr("Black"));
+        m_black->setHelpText(tr("Black point"),
+                             tr("Set the darkest output level for the selected removal segments."));
         m_black->setRange(0, 255);
         connect(m_black, &Slider::sliderPressed, this, &MainWindow::onBeginChange);
         connect(m_black, &Slider::sliderReleased, this, &MainWindow::onEndChange);
@@ -482,6 +627,8 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
         m_gamma = new Slider;
         m_gamma->setObjectName("gamma");
         m_gamma->setLabel(tr("Gamma"));
+        m_gamma->setHelpText(tr("Gamma"),
+                             tr("Bias the midpoint brightness for the selected removal segments."));
         m_gamma->setRange(-100, 100);
         connect(m_gamma, &Slider::sliderPressed, this, &MainWindow::onBeginChange);
         connect(m_gamma, &Slider::sliderReleased, this, &MainWindow::onEndChange);
@@ -490,6 +637,8 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
         m_white = new Slider;
         m_white->setObjectName("white");
         m_white->setLabel(tr("White"));
+        m_white->setHelpText(tr("White point"),
+                             tr("Set the brightest output level for the selected removal segments."));
         m_white->setRange(0, 255);
         connect(m_white, &Slider::sliderPressed, this, &MainWindow::onBeginChange);
         connect(m_white, &Slider::sliderReleased, this, &MainWindow::onEndChange);
@@ -515,6 +664,9 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
 	m_tabs->addTab(tr("Mark"));
 	m_tabs->addTab(tr("Remove"));
 	m_tabs->addTab(tr("Texture"));
+    m_tabs->setTabToolTip(kTab_Mark, tr("Mark cradle members and defect masks."));
+    m_tabs->setTabToolTip(kTab_Remove, tr("Tune the removal result for selected output regions."));
+    m_tabs->setTabToolTip(kTab_Texture, tr("Run texture removal after cradle cleanup is finished."));
 	m_tabs->blockSignals(false);
     applyMacCompactSize(m_tabs);
 
