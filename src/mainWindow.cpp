@@ -422,12 +422,14 @@ MainWindow::MainWindow(Project *project, QWidget *parent) : QMainWindow(parent),
 	m_undoMgr(new UndoManager(this)),
 	m_clipboard(new Clipboard(this)),
 	m_refreshingTheme(false),
+    m_pendingPluginMode(false),
 	m_pluginMode(false)
 {
     setObjectName("mainWindow");
     setAttribute(Qt::WA_AlwaysShowToolTips);
 
 	connect(&ImageManager::get(), &ImageManager::imageChanged, this, &MainWindow::onImageChanged);
+    connect(&ImageManager::get(), &ImageManager::loadFailed, this, &MainWindow::onImageLoadFailed);
 	connect(&ImageManager::get(), &ImageManager::status, this,
             [this](const QString &msg) { statusBar()->showMessage(msg); });
 	connect(m_undoMgr, &UndoManager::canRedoChanged, this, &MainWindow::onUndoRedoChanged);
@@ -942,24 +944,11 @@ void MainWindow::loadCradle(const QString &path)
 
 void MainWindow::open(const QString &path, bool pluginMode)
 {
-	m_pluginMode = pluginMode;
 	onClose();
 
-	QApplication::setOverrideCursor(Qt::BusyCursor);
-
-	QString imagePath = path;
-	ImageManager::get().load(imagePath);
-
-	QApplication::restoreOverrideCursor();
-    m_viewer->setTool(Viewer::kTool_Polygon);
-
-	loadCradle(QString());
-	m_project->setImagePath(imagePath);
-
-	m_open->setVisible(!pluginMode);
-	m_export->setVisible(!pluginMode);
-	m_close->setVisible(!pluginMode);
-    m_pluginControls->setVisible(pluginMode);
+    m_pendingImagePath = path;
+    m_pendingPluginMode = pluginMode;
+	ImageManager::get().load(path);
 }
 
 //
@@ -1006,6 +995,9 @@ void MainWindow::onOpen()
 
 void MainWindow::onClose()
 {
+    m_pendingImagePath.clear();
+    m_pendingPluginMode = false;
+    m_pluginMode = false;
 	m_viewer->setTool(Viewer::kTool_None);
 	m_primaryBar->setEnabled(false);
     m_modeStrip->setEnabled(false);
@@ -1066,8 +1058,36 @@ void MainWindow::onImageChanged()
     const ImageSource *source = ImageManager::get().source();
     if (source)
     {
+        if (!m_pendingImagePath.isEmpty())
+        {
+            m_pluginMode = m_pendingPluginMode;
+            m_viewer->setTool(Viewer::kTool_Polygon);
+            loadCradle(QString());
+            m_project->setImagePath(m_pendingImagePath);
+            m_open->setVisible(!m_pluginMode);
+            m_export->setVisible(!m_pluginMode);
+            m_close->setVisible(!m_pluginMode);
+            m_pluginControls->setVisible(m_pluginMode);
+            m_pendingImagePath.clear();
+        }
         statusBar()->showMessage(QString("Image Size: %1x%2").arg(source->size().width()).arg(source->size().height()));
     }
+}
+
+void MainWindow::onImageLoadFailed(const QString &message)
+{
+    if (m_pendingImagePath.isEmpty())
+        return;
+
+    m_pendingImagePath.clear();
+    m_pendingPluginMode = false;
+    m_pluginMode = false;
+    m_open->setVisible(true);
+    m_export->setVisible(true);
+    m_close->setVisible(true);
+    m_pluginControls->setVisible(false);
+    statusBar()->clearMessage();
+    QMessageBox::critical(this, QCoreApplication::applicationName(), message);
 }
 
 void MainWindow::updateMenus()

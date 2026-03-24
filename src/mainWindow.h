@@ -45,6 +45,7 @@ private slots:
     void onExport();
 	void onExit();
 	void onImageChanged();
+    void onImageLoadFailed(const QString &message);
 	void updateMenus();
 	void updateUndo();
     void updateSliders();
@@ -141,6 +142,8 @@ private:
     class QAction *m_invert;
 	QList<QAction *> m_toolActions;
     bool m_refreshingTheme;
+    QString m_pendingImagePath;
+    bool m_pendingPluginMode;
 
 	bool m_pluginMode;
 };

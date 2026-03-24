@@ -2,16 +2,243 @@
 #include <imageSource.h>
 #include <removeSource.h>
 #include <opencv2/core/core_c.h>
-#include <QtWidgets/QMessageBox>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
+#include <QtGui/QImageReader>
 #include <QtCore/QDebug>
 #include <QtCore/QCoreApplication>
+#include <QtCore/QFileInfo>
 #include <QtConcurrent/QtConcurrentRun>
 #include <cmath>
+#include <limits>
 
 static ImageManager *s_instance;
 
 static const int kMaxImageSize = 32768;
 static const int kMinSize = 1024;
+
+namespace
+{
+QVector<QRgb> grayColorTable()
+{
+    static const QVector<QRgb> colors = [] {
+        QVector<QRgb> table(256);
+        for (int i = 0; i < table.size(); ++i)
+            table[i] = qRgba(i, i, i, 255);
+        return table;
+    }();
+    return colors;
+}
+
+QImage makeIndexed8Image(const QSize &size)
+{
+    QImage image(size, QImage::Format_Indexed8);
+    image.setColorTable(grayColorTable());
+    return image;
+}
+
+QImage copyGray8ToIndexed8(const QImage &image)
+{
+    if (image.isNull())
+        return QImage();
+
+    QImage result = makeIndexed8Image(image.size());
+    for (int y = 0; y < image.height(); ++y)
+        memcpy(result.scanLine(y), image.constScanLine(y), size_t(image.width()));
+    return result;
+}
+
+QImage normalizeGray16ToIndexed8(const QImage &image)
+{
+    if (image.isNull() || image.format() != QImage::Format_Grayscale16)
+        return QImage();
+
+    quint16 minValue = std::numeric_limits<quint16>::max();
+    quint16 maxValue = 0;
+    for (int y = 0; y < image.height(); ++y)
+    {
+        const quint16 *row = reinterpret_cast<const quint16 *>(image.constScanLine(y));
+        for (int x = 0; x < image.width(); ++x)
+        {
+            minValue = std::min(minValue, row[x]);
+            maxValue = std::max(maxValue, row[x]);
+        }
+    }
+
+    QImage result = makeIndexed8Image(image.size());
+    if (maxValue == minValue)
+    {
+        const uchar fill = uchar((double(maxValue) / 65535.0) * 255.0 + 0.5);
+        result.fill(fill);
+        return result;
+    }
+
+    const double scale = 255.0 / double(maxValue - minValue);
+    for (int y = 0; y < image.height(); ++y)
+    {
+        const quint16 *srow = reinterpret_cast<const quint16 *>(image.constScanLine(y));
+        uchar *drow = result.scanLine(y);
+        for (int x = 0; x < image.width(); ++x)
+            drow[x] = uchar((double(srow[x] - minValue) * scale) + 0.5);
+    }
+
+    return result;
+}
+
+QImage decodeQtImageToWorking(const QImage &image)
+{
+    if (image.isNull())
+        return QImage();
+
+    if (image.format() == QImage::Format_Indexed8)
+    {
+        if (image.allGray())
+        {
+            QImage result = image.copy();
+            result.setColorTable(grayColorTable());
+            return result;
+        }
+        return copyGray8ToIndexed8(image.convertToFormat(QImage::Format_Grayscale8));
+    }
+
+    if (image.format() == QImage::Format_Grayscale8)
+        return copyGray8ToIndexed8(image);
+
+    if (image.format() == QImage::Format_Grayscale16)
+        return normalizeGray16ToIndexed8(image);
+
+    return copyGray8ToIndexed8(image.convertToFormat(QImage::Format_Grayscale8));
+}
+
+QImage normalizeCvGrayToIndexed8(const cv::Mat &gray)
+{
+    if (gray.empty() || gray.channels() != 1)
+        return QImage();
+
+    cv::Mat normalized;
+    if (gray.depth() == CV_8U)
+    {
+        normalized = gray;
+    }
+    else
+    {
+        double minValue = 0.0;
+        double maxValue = 0.0;
+        cv::minMaxLoc(gray, &minValue, &maxValue);
+        if (maxValue <= minValue)
+        {
+            gray.convertTo(normalized, CV_8U, 255.0 / 65535.0);
+        }
+        else
+        {
+            cv::normalize(gray, normalized, 0.0, 255.0, cv::NORM_MINMAX, CV_8U);
+        }
+    }
+
+    QImage result = makeIndexed8Image(QSize(normalized.cols, normalized.rows));
+    for (int y = 0; y < normalized.rows; ++y)
+        memcpy(result.scanLine(y), normalized.ptr(y), size_t(normalized.cols));
+    return result;
+}
+
+QImage decodeOpenCvImageToWorking(const cv::Mat &image)
+{
+    if (image.empty())
+        return QImage();
+
+    cv::Mat gray;
+    if (image.channels() == 1)
+    {
+        gray = image;
+    }
+    else if (image.channels() == 3)
+    {
+        cv::cvtColor(image, gray, cv::COLOR_BGR2GRAY);
+    }
+    else if (image.channels() == 4)
+    {
+        cv::cvtColor(image, gray, cv::COLOR_BGRA2GRAY);
+    }
+    else
+    {
+        return QImage();
+    }
+
+    return normalizeCvGrayToIndexed8(gray);
+}
+
+bool isTiffPath(const QString &path)
+{
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    return suffix == "tif" || suffix == "tiff";
+}
+
+QImage decodeWithOpenCv(const QString &path)
+{
+    const cv::Mat image = cv::imread(path.toStdString(), cv::IMREAD_ANYCOLOR | cv::IMREAD_ANYDEPTH);
+    return decodeOpenCvImageToWorking(image);
+}
+
+QImage decodeWithQt(const QString &path, QString *errorString)
+{
+    QImageReader reader(path);
+    reader.setAutoTransform(true);
+
+    if (!reader.canRead())
+    {
+        if (errorString)
+            *errorString = reader.errorString();
+        return QImage();
+    }
+
+    const QImage image = reader.read();
+    if (image.isNull())
+    {
+        if (errorString)
+            *errorString = reader.errorString();
+        return QImage();
+    }
+
+    QImage working = decodeQtImageToWorking(image);
+    if (working.isNull() && errorString)
+        *errorString = QCoreApplication::translate("ImageManager", "The image format is not supported.");
+    return working;
+}
+
+QImage loadWorkingImage(const QString &path, QString *errorString)
+{
+    QString qtError;
+
+    if (isTiffPath(path))
+    {
+        QImage image = decodeWithOpenCv(path);
+        if (!image.isNull())
+            return image;
+
+        image = decodeWithQt(path, &qtError);
+        if (!image.isNull())
+            return image;
+    }
+    else
+    {
+        QImage image = decodeWithQt(path, &qtError);
+        if (!image.isNull())
+            return image;
+
+        image = decodeWithOpenCv(path);
+        if (!image.isNull())
+            return image;
+    }
+
+    if (errorString)
+    {
+        *errorString = qtError.isEmpty()
+            ? QCoreApplication::translate("ImageManager", "The image could not be decoded.")
+            : qtError;
+    }
+    return QImage();
+}
+}
 
 static QImage scale(const QImage &source, const QSize &size)
 {
@@ -46,22 +273,13 @@ static QImage scale(const QImage &source, const QSize &size)
 class MipMappedSource : public ImageSource
 {
 	QList<QImage> m_levels;
+    QString m_errorString;
 public:
 	MipMappedSource(const QString &path)
 	{
-		QImage image(path);
+        QImage image = loadWorkingImage(path, &m_errorString);
         if (!image.isNull())
         {
-            // convert to gray if necessary
-            QImage::Format format = image.format();
-            if (format != QImage::Format_Indexed8)
-            {
-                QVector<QRgb> colors(256);
-                for (int i = 0; i < colors.size(); i++)
-                    colors[i] = qRgba(i, i, i, 255);
-                image = image.convertToFormat(QImage::Format_Indexed8, colors, Qt::ThresholdDither);
-            }
-
             m_levels.push_back(image);
             QSize size = image.size();
             while (size.width() > kMinSize || size.height() > kMinSize)
@@ -78,6 +296,11 @@ public:
 		QSize size = this->size();
 		return size.width() > kMaxImageSize || size.height() > kMaxImageSize;
 	}
+
+    QString errorString() const
+    {
+        return m_errorString;
+    }
 
 	virtual QSize size() const
 	{
@@ -156,6 +379,7 @@ QSize ImageManager::size() const
 void ImageManager::load(const QString &path)
 {
 	clear();
+    m_loadingPath = path;
 
 	emit status("Loading image...");
 
@@ -165,6 +389,7 @@ void ImageManager::load(const QString &path)
 
 void ImageManager::clear()
 {
+    m_loadingPath.clear();
     m_float = nullptr;
     m_result = nullptr;
     m_removeMask = nullptr;
@@ -209,11 +434,17 @@ void ImageManager::onLoadFinished()
     }
     else
 	{
-		if (source && source->tooBig())
-		{
-			QMessageBox::critical(nullptr, QCoreApplication::applicationName(), tr("The image is too large. It must be smaller than 32728x32768 pixels."));
-		}
+        QString message;
+        if (source && source->tooBig())
+            message = tr("The image is too large. It must be smaller than 32768x32768 pixels.");
+        else if (source && !source->errorString().isEmpty())
+            message = tr("Unable to load image \"%1\".\n\n%2")
+                          .arg(QFileInfo(m_loadingPath).fileName(), source->errorString());
+        else
+            message = tr("Unable to load image \"%1\".").arg(QFileInfo(m_loadingPath).fileName());
+
         delete source;
+        emit loadFailed(message);
 	}
 
 	emit status(QString());

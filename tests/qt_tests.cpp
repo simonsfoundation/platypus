@@ -12,9 +12,11 @@
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QElapsedTimer>
+#include <QtCore/QFile>
 #include <QtCore/QMetaObject>
 #include <QtCore/QTemporaryDir>
 
+#include <cstdint>
 #include <functional>
 
 namespace {
@@ -28,6 +30,31 @@ bool WaitForCondition(const std::function<bool()>& condition, int timeout_ms = 1
     QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
   }
   return true;
+}
+
+struct LoadOutcome {
+  bool success = false;
+  QString error;
+};
+
+LoadOutcome WaitForLoad(ImageManager& manager, int timeout_ms = 10000) {
+  LoadOutcome outcome;
+  QObject::connect(&manager, &ImageManager::loadFailed, &manager,
+                   [&](const QString& error) { outcome.error = error; },
+                   Qt::SingleShotConnection);
+
+  const bool finished = WaitForCondition(
+      [&] { return manager.source() != nullptr || !outcome.error.isEmpty(); }, timeout_ms);
+  EXPECT_TRUE(finished);
+  outcome.success = manager.source() != nullptr;
+  return outcome;
+}
+
+std::string writeTempTiff(const cv::Mat& image, const std::string& stem) {
+  const std::string path = test_helpers::temporaryPath(stem, ".tiff");
+  const bool ok = cv::imwrite(path, image);
+  EXPECT_TRUE(ok);
+  return path;
 }
 
 class FakeImageSource : public ImageSource {
@@ -124,6 +151,77 @@ TEST(PlatypusQt, ImageManagerLoadsAndClearsFixture) {
 
   manager.clear();
   EXPECT_EQ(manager.source(), nullptr);
+}
+
+TEST(PlatypusQt, ImageManagerLoadsExistingTiffFixture) {
+  ImageManager manager;
+
+  manager.load(QString::fromStdString(test_helpers::fixturePath("test.platypus.mask.tiff")));
+  const LoadOutcome outcome = WaitForLoad(manager);
+
+  ASSERT_TRUE(outcome.success);
+  ASSERT_NE(manager.source(), nullptr);
+  EXPECT_EQ(manager.source()->size(), QSize(2000, 1568));
+}
+
+TEST(PlatypusQt, ImageManagerLoadsSixteenBitGrayscaleTiff) {
+  ImageManager manager;
+  cv::Mat image(48, 64, CV_16U);
+  for (int y = 0; y < image.rows; ++y) {
+    for (int x = 0; x < image.cols; ++x)
+      image.at<std::uint16_t>(y, x) = std::uint16_t(1000 + (y * image.cols + x) * 8);
+  }
+
+  const std::string path = writeTempTiff(image, "platypus-gray16");
+  manager.load(QString::fromStdString(path));
+  const LoadOutcome outcome = WaitForLoad(manager);
+
+  ASSERT_TRUE(outcome.success);
+  ASSERT_NE(manager.source(), nullptr);
+  const QImage tile =
+      manager.source()->getTile(QRect(QPoint(0, 0), manager.source()->size()), manager.source()->size());
+  ASSERT_FALSE(tile.isNull());
+  EXPECT_EQ(tile.format(), QImage::Format_Indexed8);
+  EXPECT_NE(tile.pixelIndex(0, 0), tile.pixelIndex(tile.width() - 1, tile.height() - 1));
+}
+
+TEST(PlatypusQt, ImageManagerLoadsColorTiffAsGrayscale) {
+  ImageManager manager;
+  cv::Mat image(32, 32, CV_8UC3, cv::Scalar(0, 0, 0));
+  for (int y = 0; y < image.rows; ++y) {
+    for (int x = 0; x < image.cols; ++x)
+      image.at<cv::Vec3b>(y, x) = cv::Vec3b(std::uint8_t(x * 4), std::uint8_t(y * 6),
+                                            std::uint8_t((x + y) * 3));
+  }
+
+  const std::string path = writeTempTiff(image, "platypus-color");
+  manager.load(QString::fromStdString(path));
+  const LoadOutcome outcome = WaitForLoad(manager);
+
+  ASSERT_TRUE(outcome.success);
+  ASSERT_NE(manager.source(), nullptr);
+  const QImage tile =
+      manager.source()->getTile(QRect(QPoint(0, 0), manager.source()->size()), manager.source()->size());
+  ASSERT_FALSE(tile.isNull());
+  EXPECT_EQ(tile.format(), QImage::Format_Indexed8);
+  EXPECT_NE(tile.pixelIndex(0, 0), tile.pixelIndex(tile.width() - 1, tile.height() - 1));
+}
+
+TEST(PlatypusQt, ImageManagerFailsCleanlyForCorruptTiff) {
+  ImageManager manager;
+  const std::string path = test_helpers::temporaryPath("platypus-corrupt", ".tiff");
+
+  QFile file(QString::fromStdString(path));
+  ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+  file.write("not-a-real-tiff");
+  file.close();
+
+  manager.load(QString::fromStdString(path));
+  const LoadOutcome outcome = WaitForLoad(manager);
+
+  EXPECT_FALSE(outcome.success);
+  EXPECT_EQ(manager.source(), nullptr);
+  EXPECT_FALSE(outcome.error.isEmpty());
 }
 
 TEST(PlatypusQt, ViewerSmokeWorksOffscreen) {

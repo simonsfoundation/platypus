@@ -5,6 +5,7 @@
 #include <QtCore/QObject>
 #include <QtGui/QImage>
 #include <QtCore/QFutureWatcher>
+#include <QtCore/QString>
 
 class ImageSource;
 class RemoveSource;
@@ -33,11 +34,13 @@ public:
 Q_SIGNALS:
 	void imageChanged();
 	void status(const QString &msg);
+    void loadFailed(const QString &msg);
 
 private:
 	ImageSource *m_source;
 	RemoveSource *m_removeSource;
-	QFutureWatcher<ImageSource *> *m_watcher;
+    QFutureWatcher<ImageSource *> *m_watcher;
+    QString m_loadingPath;
     cvImageRef m_float;
     cvImageRef m_result;
     cvImageRef m_removeMask;
