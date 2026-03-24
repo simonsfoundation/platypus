@@ -4,6 +4,8 @@
 #include <project.h>
 #include <QtWidgets/QMainWindow>
 
+class QImage;
+
 class MainWindow : public QMainWindow
 {
 	Q_OBJECT
@@ -42,6 +44,7 @@ private slots:
 	void onSave();
 	void onSaveAs();
 	void onOpenImage();
+    void onOpenDicomSeries();
     void onExport();
 	void onExit();
 	void onImageChanged();
@@ -88,6 +91,13 @@ private slots:
 
 private:
     void refreshTheme();
+    bool beginImageOpen(const QString &projectPath, bool pluginMode);
+    bool beginImageOpen(const QString &projectPath,
+                        const QString &displayName,
+                        const QImage &image,
+                        bool pluginMode);
+    bool openDicomFile(const QString &path, bool pluginMode);
+    bool openDicomSeriesDirectory(const QString &directoryPath, bool pluginMode);
 
 	Project *m_project;
 	class Viewer *m_viewer;
@@ -113,6 +123,7 @@ private:
 	class QAction *m_save;
 	class QAction *m_saveAs;
 	class QAction *m_open;
+    class QAction *m_openDicomSeries;
 	class QAction *m_export;
 	class QAction *m_undo;
 	class QAction *m_redo;

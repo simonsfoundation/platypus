@@ -3,6 +3,9 @@
   "version": "0.0.1",
   "dependencies": [
     {
+      "name": "dcmtk"
+    },
+    {
       "name": "opencv4",
       "features": [
         "eigen",

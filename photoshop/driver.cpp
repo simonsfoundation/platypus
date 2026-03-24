@@ -98,17 +98,10 @@ struct PSLayer : public ReadLayerDesc
 	}
 };
 
-static bool isShiftDown()
-{
-	#if defined(WIN32)
-		return ::GetAsyncKeyState(VK_LSHIFT) != 0;
-	#endif
-    return false;
-}
-
 // launch the UI with the specified arguments and wait for it to exit
 static int DoUserInterface(const std::string &appPath, const std::vector<std::string> &args, void *parentWindow)
 {
+    (void)parentWindow;
     int result = 0;
 	#ifdef WIN32
 		HWND prevWin = ::GetForegroundWindow();
@@ -293,9 +286,8 @@ static void readPlane(const PixelMemoryDesc &plane, const VRect *tile, PSScaling
 
 static void ReadTile(const ReadLayerDesc *layer, const ReadChannelDesc *layerMask, const VRect *tile, const VPoint *size, unsigned char *buffer, int row_bytes, int chan_bytes)
 {
-	const ReadImageDocumentDesc *doc = s_filterRecord->documentInfo;
+	(void)layerMask;
 	const ReadChannelDesc *chan = layer->compositeChannelsList;
-	const BufferProcs *bufferProcs = s_filterRecord->bufferProcs;
 
 	PixelMemoryDesc plane;
     plane.data = buffer;
@@ -320,13 +312,14 @@ static void ReadTile(const ReadLayerDesc *layer, const ReadChannelDesc *layerMas
 
 static void WriteTile(const ReadLayerDesc *layer, const ReadChannelDesc *layerMask, const VRect *tile, const unsigned char *buffer, int row_bytes, int chan_bytes)
 {
+	(void)layerMask;
 	const ReadChannelDesc *chan = layer->compositeChannelsList;
 
 	if (s_chanPorts)
 	{
         PIChannelPort port = chan->writePort;
 
-        PixelMemoryDesc plane = { 0 };
+        PixelMemoryDesc plane{};
         int pixel_bytes = chan_bytes;
         plane.rowBits = row_bytes * 8;
         plane.colBits = pixel_bytes * 8;
@@ -492,21 +485,28 @@ DLLExport MACPASCAL void PluginMain (const short selector,
 						             long *data,
 						             short *result)
 {
+	(void)data;
 	*result = noErr;
 
 	SPPluginRef pluginRef = NULL;
+#ifdef WIN32
 	const PlatformData *platformData = NULL;
+#endif
 	if (selector == filterSelectorAbout)
 	{
 		sSPBasic = ((const AboutRecord *)filterRecord)->sSPBasic;
 		pluginRef = (SPPluginRef)((const AboutRecord *)filterRecord)->plugInRef;
+#ifdef WIN32
 		platformData = (const PlatformData *)((const AboutRecord *)filterRecord)->platformData;
+#endif
 	}
 	else if (selector == filterSelectorStart)
 	{
 		sSPBasic = filterRecord->sSPBasic;
 		pluginRef = (SPPluginRef)filterRecord->plugInRef;
+#ifdef WIN32
 		platformData = (const PlatformData *)filterRecord->platformData;
+#endif
  	}
 	else
 		return;
@@ -538,9 +538,8 @@ DLLExport MACPASCAL void PluginMain (const short selector,
 			return;
 		}
 
-		const ReadImageDocumentDesc *doc = filterRecord->documentInfo;
-
 		s_filterRecord = filterRecord;
+		const ReadImageDocumentDesc *doc = filterRecord->documentInfo;
 
 		// fetch the target layer
 		PSLayer input = getInputLayer(doc);

@@ -238,6 +238,14 @@ QImage loadWorkingImage(const QString &path, QString *errorString)
     }
     return QImage();
 }
+
+QImage normalizeWorkingImage(const QImage &image, QString *errorString)
+{
+    QImage working = decodeQtImageToWorking(image);
+    if (working.isNull() && errorString)
+        *errorString = QCoreApplication::translate("ImageManager", "The image format is not supported.");
+    return working;
+}
 }
 
 static QImage scale(const QImage &source, const QSize &size)
@@ -273,22 +281,36 @@ static QImage scale(const QImage &source, const QSize &size)
 class MipMappedSource : public ImageSource
 {
 	QList<QImage> m_levels;
+    QString m_name;
     QString m_errorString;
+
+    void initialize(const QImage &image)
+    {
+        if (image.isNull())
+            return;
+
+        m_levels.push_back(image);
+        QSize size = image.size();
+        QImage scaledImage = image;
+        while (size.width() > kMinSize || size.height() > kMinSize)
+        {
+            size = size / 2;
+            scaledImage = scale(scaledImage, size);
+            m_levels.push_back(scaledImage);
+        }
+    }
 public:
 	MipMappedSource(const QString &path)
 	{
         QImage image = loadWorkingImage(path, &m_errorString);
-        if (!image.isNull())
-        {
-            m_levels.push_back(image);
-            QSize size = image.size();
-            while (size.width() > kMinSize || size.height() > kMinSize)
-            {
-                size = size / 2;
-                image = scale(image, size);
-                m_levels.push_back(image);
-            }
-        }
+        m_name = QFileInfo(path).fileName();
+        initialize(image);
+	}
+
+    MipMappedSource(const QString &displayName, const QImage &image)
+    {
+        m_name = displayName;
+        initialize(normalizeWorkingImage(image, &m_errorString));
 	}
 
 	bool tooBig() const
@@ -308,7 +330,7 @@ public:
 			return QSize(0, 0);
 		return m_levels[0].size();
 	}
-	virtual QString name() const { return "Image"; }
+	virtual QString name() const { return m_name.isEmpty() ? QStringLiteral("Image") : m_name; }
 
 	virtual bool isValid() const
 	{
@@ -379,17 +401,31 @@ QSize ImageManager::size() const
 void ImageManager::load(const QString &path)
 {
 	clear();
-    m_loadingPath = path;
+    m_loadingDisplayName = QFileInfo(path).fileName();
 
 	emit status("Loading image...");
 
-	QFuture<ImageSource *> future = QtConcurrent::run(&ImageManager::loadFunc, this, path);
+	QFuture<ImageSource *> future = QtConcurrent::run([this, path]() { return loadFunc(path); });
 	m_watcher->setFuture(future);
+}
+
+void ImageManager::load(const QString &displayName, const QImage &image)
+{
+    clear();
+    m_loadingDisplayName = displayName;
+
+    emit status("Loading image...");
+
+    const QImage copiedImage = image.copy();
+    QFuture<ImageSource *> future = QtConcurrent::run([this, displayName, copiedImage]() {
+        return loadFunc(displayName, copiedImage);
+    });
+    m_watcher->setFuture(future);
 }
 
 void ImageManager::clear()
 {
-    m_loadingPath.clear();
+    m_loadingDisplayName.clear();
     m_float = nullptr;
     m_result = nullptr;
     m_removeMask = nullptr;
@@ -405,6 +441,11 @@ ImageSource *ImageManager::loadFunc(const QString &path)
 	ImageSource *source = new MipMappedSource(path);
 
     return source;
+}
+
+ImageSource *ImageManager::loadFunc(const QString &displayName, const QImage &image)
+{
+    return new MipMappedSource(displayName, image);
 }
 
 void ImageManager::onLoadFinished()
@@ -439,9 +480,9 @@ void ImageManager::onLoadFinished()
             message = tr("The image is too large. It must be smaller than 32768x32768 pixels.");
         else if (source && !source->errorString().isEmpty())
             message = tr("Unable to load image \"%1\".\n\n%2")
-                          .arg(QFileInfo(m_loadingPath).fileName(), source->errorString());
+                          .arg(m_loadingDisplayName, source->errorString());
         else
-            message = tr("Unable to load image \"%1\".").arg(QFileInfo(m_loadingPath).fileName());
+            message = tr("Unable to load image \"%1\".").arg(m_loadingDisplayName);
 
         delete source;
         emit loadFailed(message);

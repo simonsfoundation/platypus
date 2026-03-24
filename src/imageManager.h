@@ -20,6 +20,7 @@ public:
 	static ImageManager &get();
 
 	void load(const QString &path);
+    void load(const QString &displayName, const QImage &image);
 	void clear();
 
 	ImageSource *source() const { return m_source; }
@@ -40,13 +41,14 @@ private:
 	ImageSource *m_source;
 	RemoveSource *m_removeSource;
     QFutureWatcher<ImageSource *> *m_watcher;
-    QString m_loadingPath;
+    QString m_loadingDisplayName;
     cvImageRef m_float;
     cvImageRef m_result;
     cvImageRef m_removeMask;
 
 private:
 	ImageSource *loadFunc(const QString &path);
+    ImageSource *loadFunc(const QString &displayName, const QImage &image);
 
 private slots:
 	void onLoadFinished();

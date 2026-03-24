@@ -66,6 +66,16 @@ if(NOT OpenCV_FOUND)
         "    Windows: use vcpkg (see readme.md)\n")
 endif()
 
+find_package(DCMTK CONFIG REQUIRED)
+if(NOT DCMTK_FOUND)
+    message(FATAL_ERROR
+        "DCMTK not found!\n"
+        "  Run ./configure.sh (macOS/Linux) or configure.bat (Windows) to set up dependencies automatically.\n"
+        "  Or install manually:\n"
+        "    macOS:  brew install dcmtk\n"
+        "    Windows: use vcpkg (see readme.md)\n")
+endif()
+
 if (APPLE AND BUILD_PHOTOSHOP_PLUGIN)
   enable_language(OBJC)
 endif()
@@ -156,7 +166,7 @@ target_include_directories(platypus_gui PUBLIC
     ${CMAKE_CURRENT_BINARY_DIR}
 )
 target_link_libraries(platypus_gui PUBLIC
-    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent ${OpenCV_LIBS} platypus)
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent DCMTK::DCMTK ${OpenCV_LIBS} platypus)
 
 set(PLATYPUS_BUILD_MAC_APP OFF)
 if (APPLE AND (BUILD_APPLE_APP OR BUILD_PHOTOSHOP_PLUGIN))
@@ -673,13 +683,11 @@ target_compile_definitions(PlatypusPlugin PRIVATE
 # Link platform-specific libraries
 if (WIN32)
     target_link_libraries(PlatypusPlugin PRIVATE
-        platypus
         platypus_gui
         TIFF::TIFF
     )
 else()
     target_link_libraries(PlatypusPlugin PRIVATE
-        platypus
         platypus_gui
         TIFF::TIFF
         "-framework CoreFoundation"

@@ -167,13 +167,14 @@ jobs:
           rm -rf build
           QT_PREFIX="$(brew --prefix qt)"
           OPENCV_PREFIX="$(brew --prefix opencv)"
+          DCMTK_PREFIX="$(brew --prefix dcmtk)"
           cmake -B build -S . -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_APPLE_APP=ON \
             -DBUILD_TESTING=OFF \
             -DCMAKE_OSX_ARCHITECTURES="${{ matrix.cmake_arch }}" \
             -DPLATYPUS_PACKAGE_VERSION_OVERRIDE="${{ needs.prepare.outputs.package_version }}" \
-            -DCMAKE_PREFIX_PATH="${QT_PREFIX};${OPENCV_PREFIX}" \
+            -DCMAKE_PREFIX_PATH="${QT_PREFIX};${OPENCV_PREFIX};${DCMTK_PREFIX}" \
             -DOpenCV_DIR="${OPENCV_PREFIX}/lib/cmake/opencv4"
 
       - name: Build PlatypusGui
@@ -214,13 +215,14 @@ jobs:
           rm -rf build-photoshop
           QT_PREFIX="$(brew --prefix qt)"
           OPENCV_PREFIX="$(brew --prefix opencv)"
+          DCMTK_PREFIX="$(brew --prefix dcmtk)"
           cmake -B build-photoshop -S . -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_PHOTOSHOP_PLUGIN=ON \
             -DBUILD_TESTING=OFF \
             -DCMAKE_OSX_ARCHITECTURES="${{ matrix.cmake_arch }}" \
             -DPLATYPUS_PACKAGE_VERSION_OVERRIDE="${{ needs.prepare.outputs.package_version }}" \
-            -DCMAKE_PREFIX_PATH="${QT_PREFIX};${OPENCV_PREFIX}" \
+            -DCMAKE_PREFIX_PATH="${QT_PREFIX};${OPENCV_PREFIX};${DCMTK_PREFIX}" \
             -DOpenCV_DIR="${OPENCV_PREFIX}/lib/cmake/opencv4"
 
       - name: Build Photoshop release payload

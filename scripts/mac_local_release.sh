@@ -182,9 +182,11 @@ bootstrap_vcpkg() {
 configure_standard_builds() {
   local qt_prefix
   local opencv_prefix
+  local dcmtk_prefix
 
   qt_prefix="$(brew --prefix qt)"
   opencv_prefix="$(brew --prefix opencv)"
+  dcmtk_prefix="$(brew --prefix dcmtk)"
 
   log_step "Configuring standard app build"
   cmake -B "${APP_BUILD_DIR}" -S "${REPO_ROOT}" -G Ninja \
@@ -193,7 +195,7 @@ configure_standard_builds() {
     -DBUILD_TESTING=OFF \
     -DCMAKE_OSX_ARCHITECTURES="${HOST_ARCH}" \
     -DPLATYPUS_PACKAGE_VERSION_OVERRIDE="${PACKAGE_VERSION}" \
-    -DCMAKE_PREFIX_PATH="${qt_prefix};${opencv_prefix}" \
+    -DCMAKE_PREFIX_PATH="${qt_prefix};${opencv_prefix};${dcmtk_prefix}" \
     -DOpenCV_DIR="${opencv_prefix}/lib/cmake/opencv4"
 
   log_step "Configuring standard Photoshop build"
@@ -203,7 +205,7 @@ configure_standard_builds() {
     -DBUILD_TESTING=OFF \
     -DCMAKE_OSX_ARCHITECTURES="${HOST_ARCH}" \
     -DPLATYPUS_PACKAGE_VERSION_OVERRIDE="${PACKAGE_VERSION}" \
-    -DCMAKE_PREFIX_PATH="${qt_prefix};${opencv_prefix}" \
+    -DCMAKE_PREFIX_PATH="${qt_prefix};${opencv_prefix};${dcmtk_prefix}" \
     -DOpenCV_DIR="${opencv_prefix}/lib/cmake/opencv4"
 }
 

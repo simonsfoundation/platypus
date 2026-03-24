@@ -1,9 +1,9 @@
 #include "tiff.h"
 #include <tiffio.h>
+#include <cstdint>
 
 static void s_errorHandler(const char*, const char*, va_list)
 {
-	int tmp = 0;
 }
 
 TIFFImage::TIFFImage() : m_tiff(NULL)
@@ -35,10 +35,9 @@ bool TIFFImage::create(const char *path, int width, int height)
 		m_depth = 8;
 
 		int n_channels = 1;
-		int bpc = m_depth / 8;
 
-		::TIFFSetField(tiff, TIFFTAG_IMAGEWIDTH, (uint32)width);
-		::TIFFSetField(tiff, TIFFTAG_IMAGELENGTH, (uint32)height);
+		::TIFFSetField(tiff, TIFFTAG_IMAGEWIDTH, static_cast<std::uint32_t>(width));
+		::TIFFSetField(tiff, TIFFTAG_IMAGELENGTH, static_cast<std::uint32_t>(height));
 		::TIFFSetField(tiff, TIFFTAG_BITSPERSAMPLE, m_depth);
 		::TIFFSetField(tiff, TIFFTAG_COMPRESSION, COMPRESSION_NONE);
 		::TIFFSetField(tiff, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
@@ -46,8 +45,8 @@ bool TIFFImage::create(const char *path, int width, int height)
 		::TIFFSetField(tiff, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 		::TIFFSetField(tiff, TIFFTAG_SAMPLESPERPIXEL, n_channels);
 		::TIFFSetField(tiff, TIFFTAG_ROWSPERSTRIP, 1);
-		::TIFFSetField(tiff, TIFFTAG_MINSAMPLEVALUE, (uint16)0);
-        ::TIFFSetField(tiff, TIFFTAG_MAXSAMPLEVALUE, (uint16)255);
+		::TIFFSetField(tiff, TIFFTAG_MINSAMPLEVALUE, static_cast<std::uint16_t>(0));
+        ::TIFFSetField(tiff, TIFFTAG_MAXSAMPLEVALUE, static_cast<std::uint16_t>(255));
 	}
 	m_tiff = tiff;
 
@@ -72,16 +71,12 @@ bool TIFFImage::open(const char *path)
 	TIFF *tiff = ::TIFFOpen(path, "r");
 	if (tiff)
 	{
-		uint32 width, height;
-		uint16 chan_bits, sample_format;
-		uint16 orientation = ORIENTATION_TOPLEFT;
+		std::uint32_t width = 0;
+		std::uint32_t height = 0;
+		std::uint16_t chan_bits = 0;
 		::TIFFGetField(tiff, TIFFTAG_IMAGEWIDTH, &width);
 		::TIFFGetField(tiff, TIFFTAG_IMAGELENGTH, &height);
 		::TIFFGetField(tiff, TIFFTAG_BITSPERSAMPLE, &chan_bits);
-		::TIFFGetField(tiff, TIFFTAG_ORIENTATION, &orientation);
-		::TIFFGetField(tiff, TIFFTAG_SAMPLEFORMAT, &sample_format);
-		uint16 pixel_samples;
-		::TIFFGetField(tiff, TIFFTAG_SAMPLESPERPIXEL, &pixel_samples);
 
 		m_width = int(width);
 		m_height = int(height);

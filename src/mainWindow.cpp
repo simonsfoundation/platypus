@@ -10,6 +10,9 @@
 #include <polygonCommands.h>
 #include <removeSource.h>
 #include <detectCradleDialog.h>
+#include <dicomLoader.h>
+#include <dicomSeriesDialog.h>
+#include <dicomSliceDialog.h>
 #include <slider.h>
 #include <textureRemovalStatus.h>
 #include <util.hpp>
@@ -20,6 +23,7 @@
 #include <QtWidgets/QScrollArea>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QDialog>
 #include <QtWidgets/QStatusBar>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QPushButton>
@@ -39,6 +43,8 @@
 #include <QtGui/QStatusTipEvent>
 #include <QtWidgets/QStyle>
 #include <QtCore/QSettings>
+#include <QtCore/QDir>
+#include <QtCore/QFileInfo>
 #include <QtCore/QLine>
 
 static const char *kProjectExtension = "platypus";
@@ -783,6 +789,9 @@ void MainWindow::setupMenus()
 		m_open = menu->addAction(tr("&Open Image...", "File|Open"));
 		connect(m_open, &QAction::triggered, this, &MainWindow::onOpenImage);
 
+        m_openDicomSeries = menu->addAction(tr("Open DICOM &Series...", "File|Open DICOM Series"));
+        connect(m_openDicomSeries, &QAction::triggered, this, &MainWindow::onOpenDicomSeries);
+
 		// Export
 		m_export = menu->addAction(tr("&Export...", "File|Export"));
 		connect(m_export, &QAction::triggered, this, &MainWindow::onExport);
@@ -942,13 +951,162 @@ void MainWindow::loadCradle(const QString &path)
 	onTab(m_tabs->currentIndex());
 }
 
+bool MainWindow::beginImageOpen(const QString &projectPath, bool pluginMode)
+{
+    m_pendingImagePath = projectPath;
+    m_pendingPluginMode = pluginMode;
+    ImageManager::get().load(projectPath);
+    return true;
+}
+
+bool MainWindow::beginImageOpen(const QString &projectPath,
+                                const QString &displayName,
+                                const QImage &image,
+                                bool pluginMode)
+{
+    if (image.isNull())
+        return false;
+
+    m_pendingImagePath = projectPath;
+    m_pendingPluginMode = pluginMode;
+    ImageManager::get().load(displayName, image);
+    return true;
+}
+
+bool MainWindow::openDicomFile(const QString &path, bool pluginMode)
+{
+    const DicomFileInfo info = inspectDicomFile(path);
+    const QString fileName = QFileInfo(path).fileName();
+    if (!info.isDicom)
+    {
+        QMessageBox::critical(this, QCoreApplication::applicationName(),
+                              tr("The selected file \"%1\" is not a readable DICOM image.")
+                                  .arg(fileName));
+        return false;
+    }
+
+    if (!info.errorString.isEmpty())
+    {
+        QMessageBox::critical(this, QCoreApplication::applicationName(),
+                              tr("Unable to open DICOM image \"%1\".\n\n%2")
+                                  .arg(fileName, info.errorString));
+        return false;
+    }
+
+    if (info.slices.isEmpty())
+    {
+        QMessageBox::critical(this, QCoreApplication::applicationName(),
+                              tr("No readable slices were found in \"%1\".")
+                                  .arg(fileName));
+        return false;
+    }
+
+    int sliceIndex = 0;
+    if (info.slices.size() > 1)
+    {
+        DicomSliceDialog dialog(fileName, info.slices, this);
+        if (dialog.exec() != QDialog::Accepted)
+            return false;
+        sliceIndex = dialog.selectedIndex();
+        if (sliceIndex < 0 || sliceIndex >= info.slices.size())
+            return false;
+    }
+
+    const DicomRenderResult rendered = renderDicomSlice(info.slices.at(sliceIndex));
+    if (rendered.image.isNull())
+    {
+        QMessageBox::critical(this, QCoreApplication::applicationName(),
+                              tr("Unable to render DICOM image \"%1\".\n\n%2")
+                                  .arg(fileName,
+                                       rendered.errorString.isEmpty()
+                                           ? tr("Unknown DICOM rendering error.")
+                                           : rendered.errorString));
+        return false;
+    }
+
+    const QString displayName = rendered.displayName.isEmpty() ? fileName : rendered.displayName;
+    return beginImageOpen(path, displayName, rendered.image, pluginMode);
+}
+
+bool MainWindow::openDicomSeriesDirectory(const QString &directoryPath, bool pluginMode)
+{
+    const DicomDirectoryInfo info = inspectDicomDirectory(directoryPath);
+    const QString displayDirectory = QDir::toNativeSeparators(directoryPath);
+    if (!info.errorString.isEmpty())
+    {
+        QMessageBox::critical(this, QCoreApplication::applicationName(),
+                              tr("Unable to open DICOM series from \"%1\".\n\n%2")
+                                  .arg(displayDirectory, info.errorString));
+        return false;
+    }
+
+    if (info.series.isEmpty())
+    {
+        QMessageBox::critical(this, QCoreApplication::applicationName(),
+                              tr("No readable DICOM series were found in \"%1\".")
+                                  .arg(displayDirectory));
+        return false;
+    }
+
+    int seriesIndex = 0;
+    if (info.series.size() > 1)
+    {
+        DicomSeriesDialog dialog(info.series, this);
+        if (dialog.exec() != QDialog::Accepted)
+            return false;
+        seriesIndex = dialog.selectedIndex();
+        if (seriesIndex < 0 || seriesIndex >= info.series.size())
+            return false;
+    }
+
+    const DicomSeriesInfo &series = info.series.at(seriesIndex);
+    if (series.slices.isEmpty())
+    {
+        QMessageBox::critical(this, QCoreApplication::applicationName(),
+                              tr("The selected DICOM series does not contain any readable slices."));
+        return false;
+    }
+
+    int sliceIndex = 0;
+    if (series.slices.size() > 1)
+    {
+        DicomSliceDialog dialog(series.label, series.slices, this);
+        if (dialog.exec() != QDialog::Accepted)
+            return false;
+        sliceIndex = dialog.selectedIndex();
+        if (sliceIndex < 0 || sliceIndex >= series.slices.size())
+            return false;
+    }
+
+    const DicomSliceInfo &slice = series.slices.at(sliceIndex);
+    const DicomRenderResult rendered = renderDicomSlice(slice);
+    if (rendered.image.isNull())
+    {
+        QMessageBox::critical(this, QCoreApplication::applicationName(),
+                              tr("Unable to render the selected DICOM slice.\n\n%1")
+                                  .arg(rendered.errorString.isEmpty()
+                                           ? tr("Unknown DICOM rendering error.")
+                                           : rendered.errorString));
+        return false;
+    }
+
+    const QString displayName = rendered.displayName.isEmpty()
+        ? QFileInfo(slice.filePath).fileName()
+        : rendered.displayName;
+    return beginImageOpen(slice.filePath, displayName, rendered.image, pluginMode);
+}
+
 void MainWindow::open(const QString &path, bool pluginMode)
 {
 	onClose();
 
-    m_pendingImagePath = path;
-    m_pendingPluginMode = pluginMode;
-	ImageManager::get().load(path);
+    if (isDicomFilePath(path))
+    {
+        openDicomFile(path, pluginMode);
+        return;
+    }
+
+	beginImageOpen(path, pluginMode);
 }
 
 //
@@ -959,7 +1117,7 @@ void MainWindow::onOpenImage()
     pp("onOpenImage", __LINE__);
 	QSettings settings;
 	QString dir = settings.value("/imageDir").toString();
-	QString filter = tr("Project Files (*.%1);;Image Files (*.tif *.tiff *.png);;All Files (*)").arg(kProjectExtension);
+	QString filter = tr("Project Files (*.%1);;Image Files (*.tif *.tiff *.png *.dcm *.dicom);;All Files (*)").arg(kProjectExtension);
     QFileDialog dialog(this, tr("Open Image"), dir, filter);
     dialog.setFileMode(QFileDialog::ExistingFile);
 	if (dialog.exec())
@@ -972,6 +1130,20 @@ void MainWindow::onOpenImage()
 			open(path);
 		}
 	}
+}
+
+void MainWindow::onOpenDicomSeries()
+{
+    QSettings settings;
+    QString dir = settings.value("/imageDir").toString();
+    const QString selectedDir = QFileDialog::getExistingDirectory(
+        this, tr("Open DICOM Series"), dir, QFileDialog::ShowDirsOnly);
+    if (selectedDir.isEmpty())
+        return;
+
+    settings.setValue("/imageDir", selectedDir);
+    onClose();
+    openDicomSeriesDirectory(selectedDir, false);
 }
 
 void MainWindow::onOpen()
@@ -998,6 +1170,11 @@ void MainWindow::onClose()
     m_pendingImagePath.clear();
     m_pendingPluginMode = false;
     m_pluginMode = false;
+    m_open->setVisible(true);
+    m_openDicomSeries->setVisible(true);
+    m_export->setVisible(true);
+    m_close->setVisible(true);
+    m_pluginControls->setVisible(false);
 	m_viewer->setTool(Viewer::kTool_None);
 	m_primaryBar->setEnabled(false);
     m_modeStrip->setEnabled(false);
@@ -1065,6 +1242,7 @@ void MainWindow::onImageChanged()
             loadCradle(QString());
             m_project->setImagePath(m_pendingImagePath);
             m_open->setVisible(!m_pluginMode);
+            m_openDicomSeries->setVisible(!m_pluginMode);
             m_export->setVisible(!m_pluginMode);
             m_close->setVisible(!m_pluginMode);
             m_pluginControls->setVisible(m_pluginMode);
@@ -1083,6 +1261,7 @@ void MainWindow::onImageLoadFailed(const QString &message)
     m_pendingPluginMode = false;
     m_pluginMode = false;
     m_open->setVisible(true);
+    m_openDicomSeries->setVisible(true);
     m_export->setVisible(true);
     m_close->setVisible(true);
     m_pluginControls->setVisible(false);

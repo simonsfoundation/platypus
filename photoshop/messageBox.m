@@ -16,12 +16,16 @@ enum
 
 - (id)init
 {
-    self = [super init];
-    [self setStyleMask:NSBorderlessWindowMask];
-    [self setMinSize:NSMakeSize(0, 0)];
-    [self setMaxSize:NSMakeSize(0, 0)];
-    [self setFrame:NSMakeRect(0, 0, 0, 0) display:NO];
-    _result = 0;
+    self = [super initWithContentRect:NSMakeRect(0, 0, 0, 0)
+                            styleMask:NSWindowStyleMaskBorderless
+                              backing:NSBackingStoreBuffered
+                                defer:NO];
+    if (self)
+    {
+        [self setMinSize:NSMakeSize(0, 0)];
+        [self setMaxSize:NSMakeSize(0, 0)];
+        _result = 0;
+    }
     return self;
 }
 
@@ -39,15 +43,19 @@ enum
 
 int messageBox(void *parent, const char *title, const char *message, const char *okText, const char *cancelText)
 {
-	int result = NSRunAlertPanel([NSString stringWithUTF8String:title], 
-			[NSString stringWithUTF8String:message],
-			okText ? [NSString stringWithUTF8String:okText] : @"OK",	// default button
-			cancelText ? [NSString stringWithUTF8String:cancelText] : nil,	// alternate button
-			nil);
+    (void)parent;
 
-	if (result == NSAlertDefaultReturn)
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = [NSString stringWithUTF8String:title];
+    alert.informativeText = [NSString stringWithUTF8String:message];
+    [alert addButtonWithTitle:okText ? [NSString stringWithUTF8String:okText] : @"OK"];
+    if (cancelText)
+        [alert addButtonWithTitle:[NSString stringWithUTF8String:cancelText]];
+
+    NSModalResponse result = [alert runModal];
+	if (result == NSAlertFirstButtonReturn)
 		return kMsgBox_YES;
-	if (result == NSAlertAlternateReturn)
+	if (result == NSAlertSecondButtonReturn)
 		return kMsgBox_NO;
 
 	return kMsgBox_YES;

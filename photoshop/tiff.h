@@ -8,7 +8,6 @@ typedef struct tiff TIFF;
 class TIFFImage
 {
 	TIFF *m_tiff;
-	int m_scanLine;
 	int m_depth;
 	int m_width;
 	int m_height;

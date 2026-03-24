@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <dicomLoader.h>
 #include <imageManager.h>
 #include <mainWindow.h>
 #include <polygonCommands.h>
@@ -11,6 +12,7 @@
 #include <viewer.h>
 
 #include <QtCore/QCoreApplication>
+#include <QtCore/QDir>
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QFile>
 #include <QtCore/QMetaObject>
@@ -222,6 +224,78 @@ TEST(PlatypusQt, ImageManagerFailsCleanlyForCorruptTiff) {
   EXPECT_FALSE(outcome.success);
   EXPECT_EQ(manager.source(), nullptr);
   EXPECT_FALSE(outcome.error.isEmpty());
+}
+
+TEST(PlatypusQt, DicomLoaderInspectsSingleFileFixture) {
+  const QString path =
+      QString::fromStdString(test_helpers::fixturePath("Anonymized_20260324.dcm"));
+
+  const DicomFileInfo info = inspectDicomFile(path);
+  ASSERT_TRUE(info.isDicom);
+  EXPECT_TRUE(info.errorString.isEmpty());
+  ASSERT_EQ(info.slices.size(), 1);
+
+  const DicomRenderResult rendered = renderDicomSlice(info.slices.first());
+  ASSERT_TRUE(rendered.errorString.isEmpty());
+  ASSERT_FALSE(rendered.image.isNull());
+  EXPECT_EQ(rendered.image.size(), QSize(256, 256));
+  EXPECT_EQ(rendered.image.format(), QImage::Format_Indexed8);
+}
+
+TEST(PlatypusQt, ImageManagerLoadsRenderedDicomSlice) {
+  ImageManager manager;
+  const QString path =
+      QString::fromStdString(test_helpers::fixturePath("Anonymized_20260324.dcm"));
+
+  const DicomFileInfo info = inspectDicomFile(path);
+  ASSERT_TRUE(info.isDicom);
+  ASSERT_TRUE(info.errorString.isEmpty());
+  ASSERT_EQ(info.slices.size(), 1);
+
+  const DicomRenderResult rendered = renderDicomSlice(info.slices.first());
+  ASSERT_TRUE(rendered.errorString.isEmpty());
+  ASSERT_FALSE(rendered.image.isNull());
+
+  manager.load(QStringLiteral("Anonymized_20260324.dcm"), rendered.image);
+  const LoadOutcome outcome = WaitForLoad(manager);
+
+  ASSERT_TRUE(outcome.success);
+  ASSERT_NE(manager.source(), nullptr);
+  EXPECT_EQ(manager.source()->size(), QSize(256, 256));
+}
+
+TEST(PlatypusQt, DicomLoaderInspectsTopLevelSeriesDirectory) {
+  const QString directoryPath =
+      QString::fromStdString(test_helpers::fixturePath("series-00000"));
+
+  const DicomDirectoryInfo info = inspectDicomDirectory(directoryPath);
+  EXPECT_TRUE(info.errorString.isEmpty());
+  ASSERT_EQ(info.series.size(), 1);
+  ASSERT_EQ(info.series.first().slices.size(), 27);
+
+  const int middleSlice = info.series.first().slices.size() / 2;
+  const DicomRenderResult rendered =
+      renderDicomSlice(info.series.first().slices.at(middleSlice));
+  ASSERT_TRUE(rendered.errorString.isEmpty());
+  ASSERT_FALSE(rendered.image.isNull());
+  EXPECT_EQ(rendered.image.size(), QSize(256, 256));
+}
+
+TEST(PlatypusQt, DicomDirectoryScanIgnoresNestedSubdirectories) {
+  QTemporaryDir tempDir;
+  ASSERT_TRUE(tempDir.isValid());
+
+  const QString nestedDir = tempDir.filePath("nested");
+  ASSERT_TRUE(QDir().mkpath(nestedDir));
+
+  const QString sourcePath =
+      QString::fromStdString(test_helpers::fixturePath("Anonymized_20260324.dcm"));
+  const QString nestedPath = QDir(nestedDir).filePath("Anonymized_20260324.dcm");
+  ASSERT_TRUE(QFile::copy(sourcePath, nestedPath));
+
+  const DicomDirectoryInfo info = inspectDicomDirectory(tempDir.path());
+  EXPECT_TRUE(info.series.isEmpty());
+  EXPECT_FALSE(info.errorString.isEmpty());
 }
 
 TEST(PlatypusQt, ViewerSmokeWorksOffscreen) {

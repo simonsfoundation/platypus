@@ -1,3 +1,4 @@
 ninja
 qt
 opencv
+dcmtk
