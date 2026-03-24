@@ -2,9 +2,6 @@ name: Build and Release Platypus Windows Installer
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - 'v*'
 
 permissions:
   contents: write
