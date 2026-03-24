@@ -995,7 +995,6 @@ jobs:
 
           if gh release create "$TAG" \
             "${RELEASE_FILES[@]}" \
-            --target "${{ needs.prepare.outputs.target_sha }}" \
             --title "$TAG" \
             --generate-notes \
             --repo "${GITHUB_REPOSITORY}" \

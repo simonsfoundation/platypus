@@ -89,9 +89,9 @@ jobs:
           TAG="${{ github.event.inputs.tag }}"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" \
-              --target "${{ steps.resolve_target.outputs.sha }}" \
               --title "$TAG" \
-              --notes ""
+              --notes "" \
+              --repo "${GITHUB_REPOSITORY}"
           fi
 
   build:
